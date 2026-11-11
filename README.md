@@ -102,10 +102,11 @@ selected method:
   mode. The password or unlocked key is never saved to enable unattended work.
 - **System credential store:** requires an available, unlocked secure backend.
 - **Windows DPAPI:** bound to the Windows user. This is not a promise of TPM backing.
-- **Linux TPM2:** uses `systemd-creds --user --with-key=tpm2`; requires a compatible
-  systemd version, TPM hardware, and access permissions. It fails if unavailable;
-  it never silently changes to software protection. Hardware validation remains
-  necessary before relying on this mode.
+- **Linux TPM2 (experimental):** requests `systemd-creds --user --with-key=tpm2`.
+  Systemd 259 rejects this combination before checking hardware. TPM protection
+  is not validated, even on a machine with a TPM. Use the system credential store
+  or a password until a working hardware path is verified. Failures never silently
+  change to software protection.
 
 There is no key-recovery feature. Keep original photos in Google Photos.
 The protection method is fixed when the vault is created. System credential or

@@ -47,7 +47,7 @@ class UnlockDialog(QDialog):
         if sys.platform == "win32":
             self.mode.addItem("Windows account protection (DPAPI)", "dpapi")
         if sys.platform.startswith("linux"):
-            self.mode.addItem("Linux TPM2 (requires systemd-creds and TPM access)", "tpm2")
+            self.mode.addItem("Linux TPM2 (experimental; may be unsupported)", "tpm2")
         if self.existing_mode:
             index = self.mode.findData(self.existing_mode)
             if index < 0:

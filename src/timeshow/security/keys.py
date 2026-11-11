@@ -130,9 +130,19 @@ class TPMProtector:
         else:
             command.insert(2, "--refuse-null")
         try:
-            return subprocess.run(command, input=data, capture_output=True, check=True, timeout=30).stdout
+            output = subprocess.run(command, input=data, capture_output=True, check=True, timeout=30).stdout
+        except subprocess.CalledProcessError as error:
+            if b"Selected key not available in --uid= scoped mode" in (error.stderr or b""):
+                raise PhotosError(
+                    "This systemd version cannot use TPM2 with per-user credentials. "
+                    "Choose the system credential store or a password."
+                ) from None
+            raise PhotosError("TPM key protection failed. Check TPM2 hardware, permissions, and systemd support.") from None
         except (OSError, subprocess.SubprocessError):
             raise PhotosError("TPM key protection failed. Check TPM2 hardware, permissions, and systemd support.") from None
+        if not output.strip():
+            raise PhotosError("TPM key protection returned no credential data.")
+        return output
 
     def protect(self, key: bytes) -> dict:
         return {"wrapped": base64.b64encode(self._run("encrypt", key)).decode()}
