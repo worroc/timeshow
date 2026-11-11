@@ -181,6 +181,33 @@ uv run --extra gui python -m unittest discover -s tests -v
 
 For headless GUI tests on Linux, set `QT_QPA_PLATFORM=offscreen`.
 
+CI also checks native Windows DPAPI protection, windowed worker pipes, and both
+packaged workers. Linux checks use a temporary GNOME settings store. The optional
+Linux service tests verify generated systemd units and unlock a vault through a
+private GNOME keyring from a child process:
+
+```sh
+TIMESHOW_TEST_SYSTEMD_VERIFY=1 TIMESHOW_TEST_SECRET_SERVICE=1 \
+  dbus-run-session -- uv run --extra gui python -m unittest discover \
+  -s tests -p test_linux_integration.py -v
+```
+
+These service tests need `systemd-analyze`, `dbus-run-session`,
+`gnome-keyring-daemon`, `gsettings`, and the GNOME desktop schemas. Restricted
+sandboxes may prevent private services from starting. Tests do not change your
+desktop or use your saved credentials. Login startup, visible tray behavior, and
+actual scheduled wallpaper changes still need checks in a real desktop session.
+
+After building, select the packaged worker for a smoke test:
+
+```sh
+TIMESHOW_TEST_BUNDLE="$PWD/dist/Timeshow/Timeshow" \
+  uv run --extra gui python -m unittest discover -s tests -p test_bundle_integration.py -v
+```
+
+On Windows, set `TIMESHOW_TEST_BUNDLE` to `dist\Timeshow\Timeshow.exe`.
+The smoke test checks a paused worker and a wrong key without changing wallpaper.
+
 ## Measure the footprint
 
 ```sh

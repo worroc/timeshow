@@ -24,12 +24,18 @@ jobs:
           python-version: '3.12'
       - name: Install Linux Qt runtime libraries
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libegl1
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libglib2.0-bin gsettings-desktop-schemas gnome-keyring dbus
       - run: python -m pip install uv
       - run: uv sync --extra gui --group build
       - run: uv run python -m unittest discover -s tests -v
-      - name: Measure Windows process footprint
-        if: runner.os == 'Windows'
+      - name: Validate Linux settings and system credentials
+        if: runner.os == 'Linux'
+        timeout-minutes: 2
+        env:
+          TIMESHOW_TEST_SYSTEMD_VERIFY: '1'
+          TIMESHOW_TEST_SECRET_SERVICE: '1'
+        run: dbus-run-session -- uv run python -m unittest discover -s tests -p test_linux_integration.py -v
+      - name: Measure process footprint
         run: uv run python src/measure_footprint.py --output footprint.json
       - run: uv run python src/build_bundle.py
       - name: Smoke-test packaged worker
@@ -42,7 +48,6 @@ jobs:
           path: dist/Timeshow/
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
-        if: runner.os == 'Windows'
         with:
           name: Footprint-${{ runner.os }}
           path: footprint.json
