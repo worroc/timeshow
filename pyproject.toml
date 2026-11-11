@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "timeshow"
+version = "0.1.0"
+description = "Download one random image from a Google Photos link-shared album."
+requires-python = ">=3.11"
+dependencies = []
+readme = "README.md"
+license = "MIT"
+
+[project.optional-dependencies]
+gui = [
+    "PySide6-Essentials>=6.8,<7",
+    "cryptography>=44,<50",
+    "keyring>=25,<26",
+    "Pillow>=11,<13",
+]
+
+[dependency-groups]
+build = ["pyinstaller>=6.10,<7"]
+
+[project.scripts]
+timeshow = "timeshow.cli:main"
+timeshow-worker = "timeshow.worker:main"
+
+[project.gui-scripts]
+timeshow-gui = "timeshow.gui:main"
+timeshow-tray = "timeshow.tray:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/timeshow"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

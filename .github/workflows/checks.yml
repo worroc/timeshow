@@ -1,0 +1,33 @@
+name: Check and package
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install uv
+      - run: uv sync --extra gui --group build
+      - run: uv run python -m unittest discover -s tests -v
+      - run: uv run python src/build_bundle.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Timeshow-${{ runner.os }}
+          path: dist/Timeshow/
+          if-no-files-found: error
