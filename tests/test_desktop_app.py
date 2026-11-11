@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 try:
@@ -304,11 +305,12 @@ class GuiTests(unittest.TestCase):
         self.temp.cleanup()
 
     def finish_job(self):
-        for _ in range(500):
-            if not self.window.busy:
-                return
-            QTest.qWait(10)
-        self.fail("GUI background operation did not finish")
+        deadline = time.monotonic() + 5
+        while self.window.busy and time.monotonic() < deadline:
+            self.app.processEvents()
+            # qWait holds the Python GIL. Sleep releases it so the job can run.
+            time.sleep(0.01)
+        self.assertFalse(self.window.busy, "GUI background operation did not finish")
 
     def test_window_and_tray_actions(self):
         self.assertEqual(self.window.albums.count(), 1)
@@ -319,8 +321,14 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(self.window.tabs.currentIndex(), 1)
 
     def test_background_playback_updates_preview(self):
-        self.window.next_photo()
-        self.finish_job()
+        original_interval = sys.getswitchinterval()
+        try:
+            # The wait must let the worker run even without interpreter time slices.
+            sys.setswitchinterval(10)
+            self.window.next_photo()
+            self.finish_job()
+        finally:
+            sys.setswitchinterval(original_interval)
         self.assertIsNotNone(self.player.current)
         self.assertFalse(self.window._pixmap.isNull())
         self.assertEqual(len(self.player.state["seen"]), 1)
