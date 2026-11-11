@@ -28,9 +28,22 @@ jobs:
       - run: python -m pip install uv
       - run: uv sync --extra gui --group build
       - run: uv run python -m unittest discover -s tests -v
+      - name: Measure Windows process footprint
+        if: runner.os == 'Windows'
+        run: uv run python src/measure_footprint.py --output footprint.json
       - run: uv run python src/build_bundle.py
+      - name: Smoke-test packaged worker
+        env:
+          TIMESHOW_TEST_BUNDLE: ${{ github.workspace }}/dist/Timeshow/Timeshow${{ runner.os == 'Windows' && '.exe' || '' }}
+        run: uv run python -m unittest discover -s tests -p test_bundle_integration.py -v
       - uses: actions/upload-artifact@v4
         with:
           name: Timeshow-${{ runner.os }}
           path: dist/Timeshow/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: Footprint-${{ runner.os }}
+          path: footprint.json
           if-no-files-found: error

@@ -65,7 +65,6 @@ class FakeScheduler:
 def fixture(directory: Path) -> None:
     image_module = importlib.import_module("PIL.Image")
     security = importlib.import_module("timeshow.security")
-    storage = importlib.import_module("timeshow.storage")
     image = image_module.new("RGB", (4000, 3000), (50, 125, 105))
     image.save(directory / "synthetic.jpg", quality=90)
     image.close()
@@ -84,7 +83,6 @@ def fixture(directory: Path) -> None:
     state["seen"] = ["synthetic-0"]
     state["cursor"] = 0
     vault.save_state(state)
-    storage.write_json(directory / "config/settings.json", {"running": False, "interval": 300})
 
 
 def child(role: str, directory: Path) -> int:
