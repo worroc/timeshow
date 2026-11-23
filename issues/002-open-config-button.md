@@ -1,10 +1,13 @@
 # 002: Add an "Open Config" button next to "Reset viewing history…"
 
-## Fix status
+## Status: Resolved
 
 Implemented. Open Config is beside Reset viewing history in Settings. It opens
 the active vault/config folder through Desktop.open_folder. Automated checks
-cover the button and Linux/Windows command arguments. Ready for Ubuntu retest.
+cover the button and Linux/Windows command arguments. Released in
+[v0.1.1](https://github.com/worroc/timeshow/releases/tag/v0.1.1).
+Native desktop validation remains tracked in the
+[Ubuntu validation issue](https://github.com/worroc/timeshow/issues/3).
 
 ## Request
 

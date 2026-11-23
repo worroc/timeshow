@@ -1,13 +1,18 @@
 # 004: Date filters on the Settings tab are not clear
 
-## Fix status
+## Status: Resolved
 
 Implemented in a separate Filters tab, as requested by the user. From/To calendar
 pickers have Clear buttons and No limit states. Help explains inclusive bounds
 and undated photos. Saved match counts are shown. Filtering and displayed dates
 use local time. Reversed ranges are rejected before saving. Interval suffix is
 min. Automated checks cover saving, clearing, bounds, local dates, counts, and
-half-screen layouts. Ready for Ubuntu retest.
+half-screen layouts locally. Released in
+[v0.1.1](https://github.com/worroc/timeshow/releases/tag/v0.1.1).
+Native desktop validation remains tracked in the
+[Ubuntu validation issue](https://github.com/worroc/timeshow/issues/3).
+The half-screen layout failure on GitHub CI is separate unfinished work;
+this resolution does not claim that failure has been fixed.
 
 ## Observed
 

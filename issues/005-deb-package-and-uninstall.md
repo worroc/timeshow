@@ -1,6 +1,21 @@
 # 005: Install as a .deb; simple uninstall with uninstall.sh
 
-## Fix status
+## Status: Open — partially resolved
+
+Completed work is published in
+[v0.1.1](https://github.com/worroc/timeshow/releases/tag/v0.1.1): the Ubuntu 26.04
+.deb, checksum, release installation guide, and checkout uninstall helper.
+
+Remaining work:
+
+- Make install.sh/uninstall.sh wrap apt for package installs, as requested below.
+- Validate package installation, upgrade, removal, and purge in a clean Ubuntu
+  session. Broader desktop checks remain tracked in
+  [GitHub issue #3](https://github.com/worroc/timeshow/issues/3).
+- Fix the half-screen layout test failure on the GitHub runners so CI can
+  produce packages. The published package was built and checked locally.
+
+## Implementation details
 
 Partly implemented. uninstall.sh removes this checkout's user integration and
 venv. It asks before deleting private data and the saved credential key; default
@@ -10,12 +25,13 @@ directories and a fake credential store, including deletion failures.
 The user subsequently requested .deb packaging explicitly. src/build_deb.py now
 builds a native package using the version from pyproject.toml and the existing
 bundle builder. It includes launchers, icons, notices, tray autostart, and a user
-service. Packaged scheduling only writes a user timer. CI builds and uploads the
-package. Package removal keeps user data. The checkout installers remain user-only;
+service. Packaged scheduling only writes a user timer. CI is configured to build
+and upload the package, but its latest checked run is blocked by a layout test.
+Package removal keeps user data. The checkout installers remain user-only;
 install.sh/uninstall.sh do not invoke apt or sudo. Native package installation,
 upgrade, removal, and desktop behavior still need testing in a clean Ubuntu session.
 
-Local checks: the real .deb builds with version 0.1.0. Its extracted worker passes
+Local checks: the real .deb builds with version 0.1.1. Its extracted worker passes
 the paused-state and wrong-key smoke tests. Automated tests check metadata,
 root-owned payload paths, license files, private-data rejection, and user scheduling.
 The bundle version must match pyproject.toml; that same version appears in the

@@ -1,11 +1,14 @@
 # 003: Start does not change the wallpaper; first change comes one interval later
 
-## Fix status
+## Status: Resolved
 
 Implemented for GUI Start and worker/tray resume. Starting enables the schedule,
 refreshes an empty photo list, and switches once immediately. Ordinary failures
 keep scheduling enabled; exhausted collections pause. Automated checks cover
-immediate switching, pause, errors, and exhaustion. Ready for Ubuntu retest.
+immediate switching, pause, errors, and exhaustion. Released in
+[v0.1.1](https://github.com/worroc/timeshow/releases/tag/v0.1.1).
+Native scheduling validation remains tracked in the
+[Ubuntu validation issue](https://github.com/worroc/timeshow/issues/3).
 
 ## Observed
 

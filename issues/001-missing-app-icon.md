@@ -1,12 +1,20 @@
 # 001: Timeshow has no icon in the app menu, dock, and shortcuts
 
-## Fix status
+## Status: Resolved
+
+Released in [v0.1.1](https://github.com/worroc/timeshow/releases/tag/v0.1.1).
+The launcher and packaged icon changes are complete and covered by automated
+checks. Native desktop validation remains tracked separately in the
+[Ubuntu validation issue](https://github.com/worroc/timeshow/issues/3) and
+[Windows validation issue](https://github.com/worroc/timeshow/issues/2).
+
+## Resolution details
 
 Implemented. The package has SVG and ICO assets. Linux launchers install the
 icon and set Icon/StartupWMClass. GUI and tray set the desktop file name.
 Windows shortcuts and bundle builds use the ICO. Automated checks cover Linux
-launcher generation, icon sizes, and Qt rendering. Ubuntu dock/menu and native
-Windows appearance still need retesting. Rerun install.sh to update launchers.
+launcher generation, icon sizes, and Qt rendering. Rerun install.sh to update
+checkout launchers, or install the release package for a packaged installation.
 
 The Ubuntu tester later reported a missing desktop icon with the .deb install.
 The original package was checked: its SVG asset and Icon=timeshow entries were
