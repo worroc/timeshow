@@ -429,15 +429,20 @@ class GuiTests(unittest.TestCase):
     def test_window_fits_half_screen_with_photo_and_each_tab(self):
         self.window.next_photo()
         self.finish_job()
-        for width, height in [(683, 700), (960, 540)]:
-            self.window.resize(width, height)
-            for index in range(self.window.tabs.count()):
-                self.window.tabs.setCurrentIndex(index)
-                self.app.processEvents()
-                self.assertEqual(self.window.width(), width)
-                self.assertEqual(self.window.height(), height)
-                scroll = self.window.tabs.currentWidget()
-                self.assertEqual(scroll.horizontalScrollBar().maximum(), 0)
+        for font_size in (9, 10, 11):
+            font = self.window.font()
+            font.setPointSize(font_size)
+            self.window.setFont(font)
+            for width, height in [(683, 700), (960, 540)]:
+                self.window.resize(width, height)
+                for index in range(self.window.tabs.count()):
+                    self.window.tabs.setCurrentIndex(index)
+                    self.app.processEvents()
+                    self.assertEqual(self.window.width(), width)
+                    self.assertEqual(self.window.height(), height)
+                    scroll = self.window.tabs.currentWidget()
+                    self.assertEqual(scroll.horizontalScrollBar().maximum(), 0,
+                                     (font_size, self.window.tabs.tabText(index)))
         self.window.resize(1120, 760)
         self.app.processEvents()
         self.assertGreater(self.window.tabs.x(), self.window.preview.x())

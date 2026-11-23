@@ -56,6 +56,31 @@ If you previously installed from a checkout, first run `./uninstall.sh --keep-da
 in that checkout to remove its old launchers and user service. Then install the
 release package. Existing user data is preserved.
 
+## Install on Windows from a release
+
+The Windows test installer is **Timeshow-0.1.2-Setup.exe**, for 64-bit Windows 10
+(version 1809 or newer) and Windows 11.
+
+1. Open [release v0.1.2](https://github.com/worroc/timeshow/releases/tag/v0.1.2).
+2. Under **Assets**, download `Timeshow-0.1.2-Setup.exe` and `SHA256SUMS-windows`.
+3. In PowerShell, run `Get-FileHash .\Timeshow-0.1.2-Setup.exe -Algorithm SHA256`
+   in the download folder. Compare the hash with `SHA256SUMS-windows`.
+4. Close any older Timeshow window and choose **Quit tray**, then run the installer.
+5. Follow the wizard. A desktop shortcut is optional. Open **Timeshow** from Start.
+
+Python is included, and uv is not needed on the target machine. The installer
+uses `%LOCALAPPDATA%\Programs\Timeshow` for the current user. Administrator access
+is not needed. Start-menu and tray login shortcuts are included. The app does not
+start wallpaper rotation until you press **Start**. The title and About dialog
+show **0.1.2**. The installer is not code-signed.
+
+To upgrade, pause rotation, close the window and tray, and run the newer installer.
+To uninstall, use **Settings → Apps → Installed apps → Timeshow → Uninstall**.
+The uninstaller removes the scheduled task, app files, and shortcuts. It keeps
+settings, encrypted albums/history, the protected key, and downloaded images.
+Rotation is marked paused without unlocking the vault. If a wallpaper change is
+still active, let it finish and retry uninstall.
+
 ## Install from a checkout
 
 Clone this repository and run the installer for your OS. It installs
@@ -243,7 +268,7 @@ Build on Debian or Ubuntu with `dpkg-deb` installed:
 uv run --extra gui --group build python src/build_deb.py
 ```
 
-This reuses the bundle builder and creates `dist/timeshow_0.1.1_amd64.deb`
+This reuses the bundle builder and creates `dist/timeshow_0.1.2_amd64.deb`
 on an amd64 machine. Both the package version and filename come from
 `pyproject.toml`; the architecture comes from the build machine. Build on each
 target architecture. To package a fresh bundle that was already built:
@@ -265,7 +290,7 @@ Building needs no administrator access. System-wide package installation and
 removal use the normal package manager and require administrator access:
 
 ```sh
-sudo apt install ./dist/timeshow_0.1.1_amd64.deb
+sudo apt install ./dist/timeshow_0.1.2_amd64.deb
 sudo apt remove timeshow
 # To also remove package-owned system configuration:
 sudo apt purge timeshow
@@ -281,6 +306,26 @@ locations. Pause rotation and close Timeshow before removing or upgrading it.
 Remove/purge keep each user's settings, encrypted albums/history, image cache,
 and credential-store key. Package scripts do not inspect or delete home folders.
 The existing checkout installer remains available for installation without sudo.
+
+### Windows installer build
+
+On Windows, install [Inno Setup](https://jrsoftware.org/inno-setup) and run:
+
+```powershell
+uv run --extra gui --group build python src/build_windows_installer.py
+```
+
+To reuse a fresh bundle, add `--bundle dist/Timeshow`. The builder reads the version
+from `pyproject.toml`, rejects bundles with a different version, and creates
+`dist/Timeshow-0.1.2-Setup.exe` plus `dist/SHA256SUMS-windows`. It packages only the
+bundle and dependency notices. `src/windows_installer.iss` defines the per-user
+installation, shortcuts, and removal behavior. Inno Setup is used under its
+[license](https://github.com/jrsoftware/issrc/blob/main/license.txt).
+
+The Windows GitHub Actions job compiles the installer and tests a silent install,
+reinstall, paused worker, schedule removal, and uninstall with synthetic data.
+It uploads **Timeshow-Windows-installer** as a build artifact. This build runs on
+GitHub's Windows runner, so development can stay on Linux.
 
 The GitHub Actions workflow runs checks and builds separate Windows and Linux
 artifacts. It does not publish a release or upload local data. Release binaries

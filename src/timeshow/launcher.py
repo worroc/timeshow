@@ -6,10 +6,11 @@ import importlib
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Timeshow desktop application")
-    parser.add_argument("--mode", choices=["gui", "worker", "tray"], default="gui")
+    parser.add_argument("--mode", choices=["gui", "worker", "tray", "uninstall"], default="gui")
     args, remaining = parser.parse_known_args()
     # Dynamic imports keep Qt out of workers and crypto/Pillow out of the tray.
-    module = importlib.import_module("timeshow." + args.mode)
+    name = "_windows_uninstall" if args.mode == "uninstall" else args.mode
+    module = importlib.import_module("timeshow." + name)
     if args.mode == "worker":
         return module.main(remaining)
     return module.main()

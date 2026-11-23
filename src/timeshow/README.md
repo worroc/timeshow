@@ -10,6 +10,10 @@ random photo. It needs no Google account credentials or API keys.
   version file. The title, About dialog, and Debian package use the same version.
 - `_uninstall.py` removes Linux user integration and optionally deletes user data
   and the saved credential key. `uninstall.sh` runs it before removing the venv.
+- `_windows_uninstall.py` is the Windows installer's one-operation cleanup helper.
+  It refuses cleanup while the GUI, tray, or worker is active, removes this user's
+  scheduled task, and marks public settings paused. It never unlocks the vault
+  or removes private data. The installer removes its own files after cleanup.
 - `app.py` coordinates listing, random selection, and exactly one download.
 - `cli.py` reads local configuration, runs the app, and prints non-private status.
 - `player.py` manages GUI rotation, date filters, current-image retention, and no-repeat history.

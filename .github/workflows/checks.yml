@@ -24,7 +24,7 @@ jobs:
           python-version: '3.12'
       - name: Install Linux Qt runtime libraries
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libegl1 libglib2.0-bin gsettings-desktop-schemas gnome-keyring dbus
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0 libxcb-cursor0 libglib2.0-bin gsettings-desktop-schemas gnome-keyring dbus
       - run: python -m pip install uv
       - run: uv sync --extra gui --group build
       - run: uv run python -m unittest discover -s tests -v
@@ -45,6 +45,19 @@ jobs:
       - name: Build Debian package
         if: runner.os == 'Linux'
         run: uv run python src/build_deb.py --bundle dist/Timeshow
+      - name: Install Inno Setup
+        if: runner.os == 'Windows'
+        run: choco install innosetup --yes --no-progress
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        run: uv run python src/build_windows_installer.py --bundle dist/Timeshow
+      - name: Test Windows install and uninstall
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:TIMESHOW_TEST_INSTALLER = (Get-ChildItem dist/Timeshow-*-Setup.exe).FullName
+          uv run python -m unittest discover -s tests -p test_windows_installer.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Check Debian package and extracted worker
         if: runner.os == 'Linux'
         run: |
@@ -57,6 +70,14 @@ jobs:
         with:
           name: Timeshow-deb
           path: dist/*.deb
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: Timeshow-Windows-installer
+          path: |
+            dist/Timeshow-*-Setup.exe
+            dist/SHA256SUMS-windows
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:

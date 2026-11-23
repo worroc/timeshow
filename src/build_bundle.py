@@ -6,11 +6,29 @@
 """Build on the target OS. Package only code and required dependency licenses."""
 
 from importlib import metadata
+import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tomllib
+
+
+def _check_bundle(bundle: Path, executable: str = "Timeshow", version: str | None = None) -> None:
+    expected = {executable, "_internal", "LICENSE", "dependency-licenses"}
+    if {path.name for path in bundle.iterdir()} != expected:
+        raise ValueError("Expected a clean Timeshow bundle with executable, libraries, and license notices.")
+    if not os.access(bundle / executable, os.X_OK):
+        raise ValueError("The Timeshow bundle executable is missing or not executable.")
+    for path in bundle.rglob("*"):
+        if path.is_symlink() and not path.resolve().is_relative_to(bundle.resolve()):
+            raise ValueError("Bundle contains a symbolic link outside its directory.")
+        if path.name in {".private", ".git", ".env", "key.json", "state.enc", "settings.json"}:
+            raise ValueError("Bundle contains local state or private inputs.")
+    if version is not None:
+        bundled_version = bundle / "_internal/timeshow/_version.txt"
+        if not bundled_version.is_file() or bundled_version.read_text().strip() != version:
+            raise ValueError("Bundle version differs from pyproject.toml. Rebuild the desktop bundle first.")
 
 
 def main() -> int:
@@ -27,6 +45,7 @@ def main() -> int:
         "--add-data", str(version_file) + ":timeshow",
         "--icon", str(project / "src/timeshow/assets/timeshow.ico"),
         "--hidden-import", "timeshow.worker", "--hidden-import", "timeshow.tray",
+        "--hidden-import", "timeshow._windows_uninstall",
         "--hidden-import", "timeshow.gui.window", str(project / "src/desktop_main.py"),
     ], cwd=project, check=True)
     bundle = project / "dist/Timeshow"

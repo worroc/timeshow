@@ -1,5 +1,7 @@
 """User-owned OS scheduling. No resident scheduler process or elevated tasks."""
 
+import csv
+from io import StringIO
 import os
 from pathlib import Path
 import subprocess
@@ -62,3 +64,14 @@ class Scheduler:
             self._run(["schtasks.exe", "/Change", "/TN", "Timeshow", "/DISABLE"])
         else:
             self._run(["systemctl", "--user", "disable", "--now", "timeshow.timer"])
+
+    def _remove_windows_task(self) -> None:
+        try:
+            result = subprocess.run(["schtasks.exe", "/Query", "/FO", "CSV", "/NH"],
+                                    capture_output=True, text=True, check=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            raise PhotosError("Could not check Windows wallpaper scheduling.") from None
+        tasks = {row[0] for row in csv.reader(StringIO(result.stdout)) if row}
+        if r"\Timeshow" in tasks:
+            self.disable()
+            self._run(["schtasks.exe", "/Delete", "/TN", "Timeshow", "/F"])

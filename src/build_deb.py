@@ -16,7 +16,7 @@ import tomllib
 
 from PIL import Image
 
-from build_bundle import main as build_bundle
+from build_bundle import _check_bundle, main as build_bundle
 
 
 SERVICE = """[Unit]
@@ -68,19 +68,6 @@ def _write(root: Path, name: str, text: str, mode: int = 0o644) -> None:
     destination.chmod(mode)
 
 
-def _check_bundle(bundle: Path) -> None:
-    expected = {"Timeshow", "_internal", "LICENSE", "dependency-licenses"}
-    if {path.name for path in bundle.iterdir()} != expected:
-        raise ValueError("Expected a clean Timeshow bundle with executable, libraries, and license notices.")
-    if not os.access(bundle / "Timeshow", os.X_OK):
-        raise ValueError("The Timeshow bundle executable is missing or not executable.")
-    for path in bundle.rglob("*"):
-        if path.is_symlink() and not path.resolve().is_relative_to(bundle.resolve()):
-            raise ValueError("Bundle contains a symbolic link outside its directory.")
-        if path.name in {".private", ".git", ".env", "key.json", "state.enc", "settings.json"}:
-            raise ValueError("Bundle contains local state or private inputs.")
-
-
 def _stage_icon(project: Path, root: Path) -> None:
     # Use the existing multi-size logo. PNG needs no SVG loader or theme lookup.
     destination = root / "usr/share/pixmaps/timeshow.png"
@@ -96,10 +83,7 @@ def _stage_icon(project: Path, root: Path) -> None:
 
 
 def _stage(project: Path, bundle: Path, root: Path, version: str, architecture: str) -> None:
-    _check_bundle(bundle)
-    bundled_version = bundle / "_internal/timeshow/_version.txt"
-    if not bundled_version.is_file() or bundled_version.read_text().strip() != version:
-        raise ValueError("Bundle version differs from pyproject.toml. Rebuild the desktop bundle first.")
+    _check_bundle(bundle, version=version)
     target = root / "opt/timeshow"
     target.parent.mkdir(parents=True)
     shutil.copytree(bundle, target, symlinks=True)

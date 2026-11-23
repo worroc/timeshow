@@ -10,7 +10,7 @@ from PySide6.QtGui import QAction, QImage, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDateEdit, QDialog, QDialogButtonBox, QFileDialog,
     QFormLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QMainWindow, QMenu, QMessageBox, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QSplitter,
+    QMainWindow, QMenu, QMessageBox, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QSplitter, QStyle,
     QSystemTrayIcon, QTabWidget, QVBoxLayout, QWidget,
 )
 
@@ -301,7 +301,9 @@ class Window(QMainWindow):
         restore.clicked.connect(self.restore_excluded)
         layout.addWidget(restore)
         layout.addStretch()
-        layout.addWidget(QLabel(f"Timeshow {APP_VERSION} · MIT license · Provided as is"))
+        footer = QLabel(f"Timeshow {APP_VERSION} · MIT license · Provided as is")
+        footer.setWordWrap(True)
+        layout.addWidget(footer)
         self._add_tab(panel, "Settings")
 
     def _filters_tab(self) -> None:
@@ -527,6 +529,11 @@ class Window(QMainWindow):
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         if hasattr(self, "splitter"):
+            # Leave enough room for the controls and a vertical scrollbar.
+            minimum = max(self.tabs.widget(index).widget().minimumSizeHint().width()
+                          for index in range(self.tabs.count()))
+            scrollbar = self.style().pixelMetric(QStyle.PixelMetric.PM_ScrollBarExtent)
+            self.tabs.setMinimumWidth(max(280, minimum + scrollbar + 2))
             narrow = self.width() < 900
             orientation = Qt.Orientation.Vertical if narrow else Qt.Orientation.Horizontal
             if self.splitter.orientation() != orientation:
