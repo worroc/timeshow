@@ -7,6 +7,55 @@ The window title, **Help → About Timeshow**, and tray tooltip show the app
 version. Close the app and quit its tray after upgrading, then reopen it to load
 the new version.
 
+## Install on Ubuntu from a release
+
+The **0.1.1** release package is for **Ubuntu 26.04, amd64** (64-bit Intel or AMD).
+Python is included in the app bundle. Python and uv do not need to be installed.
+The package requires glibc 2.43. It does not support Ubuntu 22.04 or 24.04.
+
+1. Open [GitHub Releases](https://github.com/worroc/timeshow/releases/latest).
+2. Expand **Assets**. Download `timeshow_0.1.1_amd64.deb` and `SHA256SUMS`.
+3. If Timeshow is open, pause rotation, close its window, and choose **Quit tray**.
+4. Open a terminal in the download folder and run:
+
+   ```sh
+   cd ~/Downloads
+   sha256sum --check SHA256SUMS
+   sudo apt install ./timeshow_0.1.1_amd64.deb
+   ```
+
+   The checksum should report **OK**. Stop if it reports a mismatch. `apt` installs
+   the package and its required system libraries. Package installation needs
+   administrator access; running Timeshow does not.
+
+5. Open **Timeshow** from the application menu, or run `timeshow` in a terminal.
+   The window title and **Help → About Timeshow** should show **0.1.1**.
+6. Add albums, refresh the photo list, then press **Start**.
+
+Download from **Releases → Assets** to install the app. The **Source code** archives
+contain the project sources, not an installable package. The **Actions** page also
+has build artifacts, but a release download does not require opening an Actions run.
+
+To upgrade, download the newer `.deb`, close the window and tray, and install it
+with `sudo apt install ./<downloaded-file>.deb`. Settings, albums, and history are
+kept. Reopen the app after upgrading. To reinstall the same version, add
+`--reinstall` to the `apt install` command.
+
+To remove the app:
+
+```sh
+sudo apt remove timeshow
+```
+
+`sudo apt purge timeshow` also removes package-owned system configuration.
+Both commands keep your private user data and credential-store key. See
+[Private storage](#private-storage) for the user folders. The package manager
+does not delete those folders or the key.
+
+If you previously installed from a checkout, first run `./uninstall.sh --keep-data`
+in that checkout to remove its old launchers and user service. Then install the
+release package. Existing user data is preserved.
+
 ## Install from a checkout
 
 Clone this repository and run the installer for your OS. It installs
