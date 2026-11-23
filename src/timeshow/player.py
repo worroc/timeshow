@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
 import secrets
@@ -117,7 +117,7 @@ class Player:
             if after or before:
                 if timestamp is None:
                     continue
-                day = datetime.fromtimestamp(timestamp / 1000, timezone.utc).date().isoformat()
+                day = datetime.fromtimestamp(timestamp / 1000).date().isoformat()
                 if (after and day < after) or (before and day > before):
                     continue
             result.append(key)

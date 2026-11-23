@@ -79,6 +79,10 @@ class Desktop:
         else:
             run_command(["xdg-open", str(path.resolve().parent)])
 
+    def open_folder(self, path: Path) -> None:
+        executable = "explorer.exe" if sys.platform == "win32" else "xdg-open"
+        run_command([executable, str(path.resolve())])
+
     def open_album(self, url: str) -> None:
         from_url = url.strip()
         validate_url(from_url, album=True)

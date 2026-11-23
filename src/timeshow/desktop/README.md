@@ -3,6 +3,7 @@
 The main application calls `Desktop` for wallpaper changes, showing files,
 and opening a source album in a browser. The adapter chooses Windows, GNOME,
 or KDE behavior. Unsupported Linux desktops produce a clear error.
+`open_folder()` opens a folder itself. `reveal()` shows a file in its parent folder.
 
 Windows uses the system wallpaper API. GNOME uses GSettings. KDE uses the
 Plasma scripting interface through qdbus. No shell evaluates file paths.

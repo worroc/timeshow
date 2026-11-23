@@ -10,16 +10,18 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 try:
     from PIL import Image
     from timeshow.player import CollectionExhausted, Player
-    from timeshow.security import PasswordProtector, Vault
+    from timeshow.security import KeyringProtector, PasswordProtector, Vault
 except ModuleNotFoundError:
     raise unittest.SkipTest("Install the gui extra to test encrypted desktop playback.")
 
 from timeshow.photos import DownloadedImage, ImageCandidate, PhotosError
 from timeshow.worker import perform
+from timeshow._version import APP_VERSION
 
 ALBUM_URL = "https://photos.google.com/share/synthetic?key=synthetic"
 PASSWORD = "synthetic test password"
@@ -66,6 +68,9 @@ class FakeDesktop:
         self.opened.append(url)
 
     def reveal(self, path):
+        self.opened.append(path)
+
+    def open_folder(self, path):
         self.opened.append(path)
 
 
@@ -234,6 +239,43 @@ class PlayerTests(unittest.TestCase):
         self.assertFalse(perform(self.player, "tick", FakeScheduler()))
         self.assertEqual(self.desktop.paths, [])
 
+    def test_resume_switches_immediately_and_pause_does_not_switch(self):
+        scheduler = FakeScheduler()
+        self.player.state["images"] = {}
+        with patch.object(Vault, "mode", return_value="keyring"):
+            perform(self.player, "resume", scheduler)
+        self.assertEqual(scheduler.interval, 300)
+        self.assertTrue(self.player.state["running"])
+        self.assertGreater(self.player.state["last_switch"], 0)
+        self.assertEqual(len(self.desktop.paths), 1)
+        perform(self.player, "pause", scheduler)
+        self.assertIsNone(scheduler.interval)
+        self.assertEqual(len(self.desktop.paths), 1)
+
+    def test_resume_failure_keeps_schedule_enabled(self):
+        scheduler = FakeScheduler()
+        self.desktop.fail_wallpaper = True
+        with patch.object(Vault, "mode", return_value="keyring"):
+            with self.assertRaises(PhotosError):
+                perform(self.player, "resume", scheduler)
+        self.assertTrue(self.vault.load_state()["running"])
+        self.assertEqual(scheduler.interval, 300)
+
+    @unittest.skipUnless(hasattr(time, "tzset"), "Requires POSIX time zones")
+    def test_filters_use_local_dates_and_include_both_bounds(self):
+        try:
+            with patch.dict(os.environ, {"TZ": "EST5"}):
+                time.tzset()
+                self.player.state["images"]["synthetic-1"]["capture_time_ms"] = int(
+                    datetime(2025, 1, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
+                self.player.state["images"]["synthetic-2"]["capture_time_ms"] = None
+                self.player.configure(60, "fill", "2024-12-31", "2024-12-31", 1)
+                self.assertEqual(self.player.eligible(), ["synthetic-1"])
+                self.player.configure(60, "fill", "", "", 1)
+                self.assertEqual(len(self.player.eligible()), 3)
+        finally:
+            time.tzset()
+
     def test_scheduled_worker_checks_interval_and_exits_after_one_switch(self):
         self.player.state["running"] = True
         self.player.save()
@@ -273,9 +315,10 @@ class PlayerTests(unittest.TestCase):
 
 try:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import QDate
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication
-    from timeshow.gui.window import UnlockDialog, Window
+    from PySide6.QtWidgets import QApplication, QPushButton
+    from timeshow.gui.window import UnlockDialog, Window, main as gui_main
     HAS_QT = True
 except ModuleNotFoundError:
     HAS_QT = False
@@ -334,25 +377,131 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(len(self.player.state["seen"]), 1)
         self.assertTrue(self.window.web_button.isEnabled())
 
-    def test_start_pause_and_exhaustion(self):
-        self.window.toggle()
+    def test_filters_tab_saves_date_range(self):
+        index = next(index for index in range(self.window.tabs.count())
+                     if self.window.tabs.tabText(index) == "Filters")
+        self.window.tabs.setCurrentIndex(index)
+        self.window.after.setDate(QDate(2025, 2, 1))
+        self.window.before.setDate(QDate(2025, 2, 28))
+        self.window.save_settings()
         self.finish_job()
+        self.assertEqual(self.player.eligible(), ["synthetic-2"])
+        self.player.reload()
+        self.assertEqual(self.player.state["after"], "2025-02-01")
+        self.assertEqual(self.player.state["before"], "2025-02-28")
+        self.assertIn("1 of 3 photos match", self.window.filter_counts.text())
+
+    def test_filters_can_be_cleared_and_reject_reversed_range(self):
+        self.window.after.setDate(QDate(2025, 3, 1))
+        self.window.before.setDate(QDate(2025, 2, 1))
+        self.window.save_settings()
+        self.assertFalse(self.window.busy)
+        self.assertIn("From must be on or before To", self.window.status.text())
+        for field in (self.window.after, self.window.before):
+            field.setDate(field.minimumDate())
+        self.window.save_settings()
+        self.finish_job()
+        self.assertEqual(self.player.state["after"], "")
+        self.assertEqual(self.player.state["before"], "")
+
+    def test_open_config_opens_the_config_folder(self):
+        button = next(button for button in self.window.findChildren(QPushButton)
+                      if button.text() == "Open Config")
+        button.click()
+        self.finish_job()
+        self.assertEqual(self.player.desktop.opened, [self.player.vault.directory])
+
+    def test_packaged_icon_renders(self):
+        self.assertFalse(self.window.windowIcon().pixmap(64, 64).isNull())
+
+    def test_version_is_shown_in_title_and_about(self):
+        self.assertEqual(self.window.windowTitle(), f"Timeshow {APP_VERSION}")
+        with patch("timeshow.gui.window.QMessageBox.about") as about:
+            help_menu = self.window.menuBar().actions()[0].menu()
+            help_menu.actions()[0].trigger()
+            self.assertEqual(about.call_args.args[1], "About Timeshow")
+            self.assertIn(APP_VERSION, about.call_args.args[2])
+
+    def test_window_fits_half_screen_with_photo_and_each_tab(self):
+        self.window.next_photo()
+        self.finish_job()
+        for width, height in [(683, 700), (960, 540)]:
+            self.window.resize(width, height)
+            for index in range(self.window.tabs.count()):
+                self.window.tabs.setCurrentIndex(index)
+                self.app.processEvents()
+                self.assertEqual(self.window.width(), width)
+                self.assertEqual(self.window.height(), height)
+                scroll = self.window.tabs.currentWidget()
+                self.assertEqual(scroll.horizontalScrollBar().maximum(), 0)
+        self.window.resize(1120, 760)
+        self.app.processEvents()
+        self.assertGreater(self.window.tabs.x(), self.window.preview.x())
+
+    def test_start_pause_and_exhaustion(self):
+        with patch.object(Vault, "mode", return_value="keyring"):
+            self.window.toggle()
+            self.finish_job()
         self.assertTrue(self.window.running)
+        self.assertEqual(len(self.player.desktop.paths), 1)
         self.assertTrue(self.window.timer.isActive())
         self.assertEqual(self.window.scheduler.interval, 300)
         self.window.toggle()
         self.finish_job()
         self.assertFalse(self.window.running)
         self.assertIsNone(self.window.scheduler.interval)
+        self.assertEqual(len(self.player.desktop.paths), 1)
         for _ in range(4):
             self.window.next_photo()
             self.finish_job()
         self.assertIn("Every eligible photo", self.window.status.text())
 
-    def test_unlock_dialog_password_setup(self):
-        dialog = UnlockDialog(self.root / "new-vault", self.root / "new-cache")
-        dialog.mode.setCurrentIndex(dialog.mode.findData("password"))
+    def test_start_failure_shows_error_and_keeps_running(self):
+        self.player.desktop.fail_wallpaper = True
+        with patch.object(Vault, "mode", return_value="keyring"):
+            self.window.toggle()
+            self.finish_job()
+        self.assertTrue(self.window.running)
+        self.assertIn("wallpaper failure", self.window.status.text())
+
+    def test_start_exhaustion_pauses_rotation(self):
+        self.player.state["seen"] = list(self.player.state["images"])
+        self.player.save()
+        with patch.object(Vault, "mode", return_value="keyring"):
+            self.window.toggle()
+            self.finish_job()
+        self.assertFalse(self.window.running)
+        self.assertIsNone(self.window.scheduler.interval)
+
+    def test_existing_password_storage_still_unlocks(self):
+        dialog = UnlockDialog(self.root / "vault", self.root / "vault/cache")
+        self.assertTrue(dialog.mode.isHidden())
+        self.assertTrue(dialog.confirm.isHidden())
+        dialog.password.setText("wrong synthetic password")
+        dialog.unlock()
+        self.assertIsNone(dialog.vault)
         dialog.password.setText(PASSWORD)
-        dialog.confirm.setText(PASSWORD)
         dialog.unlock()
         self.assertIsNotNone(dialog.vault)
+
+    def test_normal_startup_opens_window_without_setup_dialog(self):
+        directory = self.root / "automatic-config"
+        wrapper = PasswordProtector(PASSWORD)
+        with patch("timeshow._setup.sys") as system, patch.object(
+            KeyringProtector, "protect", side_effect=wrapper.protect
+        ) as protect, patch.object(KeyringProtector, "unlock", side_effect=wrapper.unlock), patch(
+            "timeshow.gui.window.config_directory", return_value=directory
+        ), patch("timeshow.gui.window.app_directory", return_value=self.root / "data"), patch(
+            "timeshow.gui.window.runtime_directory", return_value=self.root / "runtime"
+        ), patch("timeshow.gui.window.QApplication") as application, patch(
+            "timeshow.gui.window.Window"
+        ) as window, patch("timeshow.gui.window.UnlockDialog") as dialog, patch(
+            "timeshow.gui.window.spawn"
+        ), patch("timeshow.gui.window.QLockFile"):
+            system.platform = "linux"
+            application.return_value.exec.return_value = 0
+            self.assertEqual(gui_main(), 0)
+            self.assertEqual(gui_main(), 0)
+            self.assertEqual(window.return_value.show.call_count, 2)
+            dialog.assert_not_called()
+            protect.assert_called_once()

@@ -21,17 +21,21 @@ Push-Location $projectDir
 try {
     & uv sync --python 3.12 --extra gui
     if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
+    & (Join-Path $projectDir '.venv\Scripts\python.exe') -m timeshow._setup
+    if ($LASTEXITCODE -ne 0) { throw 'Secure storage setup failed. See the message above.' }
     $programs = [Environment]::GetFolderPath('Programs')
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut((Join-Path $programs 'Timeshow.lnk'))
     $shortcut.TargetPath = Join-Path $projectDir '.venv\Scripts\timeshow-gui.exe'
     $shortcut.WorkingDirectory = $projectDir
     $shortcut.Description = 'Rotate photos from your selected albums'
+    $shortcut.IconLocation = Join-Path $projectDir 'src\timeshow\assets\timeshow.ico'
     $shortcut.Save()
     $startup = [Environment]::GetFolderPath('Startup')
     $trayShortcut = $shell.CreateShortcut((Join-Path $startup 'Timeshow tray.lnk'))
     $trayShortcut.TargetPath = Join-Path $projectDir '.venv\Scripts\timeshow-tray.exe'
     $trayShortcut.WorkingDirectory = $projectDir
+    $trayShortcut.IconLocation = Join-Path $projectDir 'src\timeshow\assets\timeshow.ico'
     $trayShortcut.Save()
     Write-Host 'Installed. Open Timeshow from the Start menu.'
 } finally {

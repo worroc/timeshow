@@ -21,8 +21,12 @@ fi
 
 cd "$project_dir"
 uv sync --python 3.12 --extra gui
+"$project_dir/.venv/bin/python" -m timeshow._setup
 launcher_dir="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 mkdir -p "$launcher_dir"
+icon_dir="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
+mkdir -p "$icon_dir"
+cp "$project_dir/src/timeshow/assets/timeshow.svg" "$icon_dir/timeshow.svg"
 # A quoted Exec value handles checkout paths containing spaces. Reject desktop
 # control characters rather than generating an invalid launcher.
 case "$project_dir" in
@@ -34,6 +38,8 @@ cat > "$launcher_dir/timeshow.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Timeshow
+Icon=timeshow
+StartupWMClass=timeshow
 Comment=Rotate photos from your selected albums
 Exec="$project_dir/.venv/bin/timeshow-gui"
 Path=$project_dir
@@ -48,7 +54,14 @@ cat > "$autostart_dir/timeshow-tray.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Timeshow tray
+Icon=timeshow
 Exec="$project_dir/.venv/bin/timeshow-tray"
 Terminal=false
 EOF
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "$launcher_dir" || true
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -f -t "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor" || true
+fi
 printf '%s\n' 'Installed. Open Timeshow from your application menu.'

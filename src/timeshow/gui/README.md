@@ -10,7 +10,18 @@ menu provides Next, Previous, Pause/Resume, Open album in browser, Settings, and
 Quit tray. The tray lives in `timeshow.tray`, a separate process. Closing the
 GUI exits it, releasing preview buffers and the unlocked vault key.
 
-Startup asks the user to create or unlock an encrypted vault outside the checkout.
+Filters has optional From and To calendar pickers, Clear buttons, explanations,
+and a count of matching photos. Bounds include both days in the local time zone;
+this replaces UTC date matching. Undated photos are skipped only while a limit
+is set. Settings has Open Config beside Reset viewing history. It opens the
+config folder without exporting or decrypting data. Start switches immediately
+before the schedule continues. A failed switch leaves the schedule enabled for
+retry; exhausting the available photos pauses rotation.
+
+Startup creates secure storage automatically if the installer has not done so.
+Windows uses DPAPI; Linux uses the secure desktop credential store. Users do not
+choose a protection method. Existing storage is preserved and unlocked with its
+original method. Only existing password protection asks for a Timeshow password.
 Passwords are never saved. No old PoC album or plaintext data is imported silently.
 Start registers a per-user OS schedule. The scheduler launches `timeshow.worker`
 for one change, then the worker exits. Manual Next/Previous also run in a child

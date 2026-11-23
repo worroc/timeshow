@@ -42,6 +42,22 @@ jobs:
         env:
           TIMESHOW_TEST_BUNDLE: ${{ github.workspace }}/dist/Timeshow/Timeshow${{ runner.os == 'Windows' && '.exe' || '' }}
         run: uv run python -m unittest discover -s tests -p test_bundle_integration.py -v
+      - name: Build Debian package
+        if: runner.os == 'Linux'
+        run: uv run python src/build_deb.py --bundle dist/Timeshow
+      - name: Check Debian package and extracted worker
+        if: runner.os == 'Linux'
+        run: |
+          dpkg-deb --field dist/*.deb Package Version Architecture
+          dpkg-deb --extract dist/*.deb "$RUNNER_TEMP/timeshow-deb"
+          TIMESHOW_TEST_BUNDLE="$RUNNER_TEMP/timeshow-deb/opt/timeshow/Timeshow" \
+            uv run python -m unittest discover -s tests -p test_bundle_integration.py -v
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: Timeshow-deb
+          path: dist/*.deb
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: Timeshow-${{ runner.os }}

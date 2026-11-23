@@ -18,8 +18,8 @@ except ImportError:
     secretstorage = None
 
 from timeshow.desktop import Desktop
+from timeshow._setup import _initialize_storage
 from timeshow.scheduling import Scheduler
-from timeshow.security import KeyringProtector, Vault
 
 
 @unittest.skipUnless(sys.platform.startswith("linux"), "Requires Linux")
@@ -91,7 +91,7 @@ class LinuxIntegrationTests(unittest.TestCase):
                     daemon.stdin.write(b"synthetic integration password\n")
                     daemon.stdin.close()
                     self._wait_for_unlocked_keyring(daemon)
-                    vault = Vault.open(root / "vault", KeyringProtector(), root / "cache")
+                    vault = _initialize_storage(root / "vault", root / "cache")
                     state = vault.load_state()
                     state["seen"] = ["synthetic-shown-image"]
                     vault.save_state(state)

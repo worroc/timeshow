@@ -6,11 +6,18 @@ random photo. It needs no Google account credentials or API keys.
 - `photos/` is the enclosed retrieval library. Its public `PhotosClient` interface
   lists photo candidates and pulls one image. See `photos/README.md` for usage.
 - `storage.py` writes private files atomically.
+- `_version.py` reads the app version from project metadata or the frozen build's
+  version file. The title, About dialog, and Debian package use the same version.
+- `_uninstall.py` removes Linux user integration and optionally deletes user data
+  and the saved credential key. `uninstall.sh` runs it before removing the venv.
 - `app.py` coordinates listing, random selection, and exactly one download.
 - `cli.py` reads local configuration, runs the app, and prints non-private status.
 - `player.py` manages GUI rotation, date filters, current-image retention, and no-repeat history.
 - `settings.py` stores ordinary preferences as plaintext, excluding links and photo identities.
 - `security/` encrypts private GUI data and provides key-protection adapters.
+- `_setup.py` initializes secure storage during installation or first launch.
+  It uses DPAPI on Windows and the desktop credential store on Linux. Existing
+  storage is preserved. Setup fails if secure storage is unavailable.
 - `desktop/` provides OS-specific wallpaper, browser, and file-manager calls.
 - `gui/` provides the Qt window and system tray, with background workers.
 - `worker.py` performs one operation and exits; it never imports Qt.

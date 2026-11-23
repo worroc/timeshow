@@ -1,28 +1,31 @@
 """Qt interface and tray actions; the player owns application behavior."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 import sys
 from typing import Callable
 
-from PySide6.QtCore import QLockFile, QThread, QTimer, Qt, Signal, Slot
+from PySide6.QtCore import QDate, QLockFile, QThread, QTimer, Qt, Signal, Slot
 from PySide6.QtGui import QAction, QImage, QPixmap
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog,
+    QApplication, QCheckBox, QComboBox, QDateEdit, QDialog, QDialogButtonBox, QFileDialog,
     QFormLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QMainWindow, QMenu, QMessageBox, QPushButton, QSpinBox, QSplitter,
+    QMainWindow, QMenu, QMessageBox, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QSplitter,
     QSystemTrayIcon, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from ..desktop import Desktop, app_directory, config_directory, runtime_directory
+from .._version import APP_VERSION
+from .._setup import _initialize_storage
 from ..photos import PhotosError
 from ..photos._image import image_extension
-from ..player import DisplayedPhoto, Player
+from ..player import CollectionExhausted, DisplayedPhoto, Player
 from ..security import DPAPIProtector, KeyringProtector, PasswordProtector, TPMProtector, Vault
 from ..storage import private_directory
 from ..processes import operation_lock, run_worker, spawn
 from ..scheduling import Scheduler, publish_settings
 from ..ui_icon import app_icon
+from ..worker import open_vault, perform
 
 
 class UnlockDialog(QDialog):
@@ -35,7 +38,7 @@ class UnlockDialog(QDialog):
         self.setWindowTitle("Unlock Timeshow" if self.existing_mode else "Welcome to Timeshow")
         self.setMinimumWidth(440)
         layout = QVBoxLayout(self)
-        title = QLabel("Unlock your photo vault" if self.existing_mode else "Protect your photo vault")
+        title = QLabel("Enter your Timeshow password" if self.existing_mode else "Protect your photo data")
         title.setStyleSheet("font-size: 22px; font-weight: 600;")
         layout.addWidget(title)
         text = QLabel("Album links and viewing history are encrypted.\nChoose how to protect the encryption key.")
@@ -78,6 +81,11 @@ class UnlockDialog(QDialog):
         layout.addWidget(buttons)
         self.mode.currentIndexChanged.connect(self.mode_changed)
         self.mode_changed()
+        if self.existing_mode == "password":
+            self.mode.hide()
+            self.password.setPlaceholderText("Timeshow password")
+            text.setText("Enter the password you previously chose for Timeshow.")
+            note.setText("Keep your original photos in Google Photos.")
 
     def mode_changed(self) -> None:
         password = self.mode.currentData() == "password"
@@ -132,10 +140,10 @@ class Window(QMainWindow):
         self._outcome = (None, None)
         self._success: Callable | None = None
         self._pixmap = QPixmap()
-        self.setWindowTitle("Timeshow")
+        self.setWindowTitle(f"Timeshow {APP_VERSION}")
         self.setWindowIcon(app_icon())
         self.resize(1120, 760)
-        self.setMinimumSize(880, 600)
+        self.setMinimumSize(480, 520)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.external_update)
         self._build()
@@ -159,6 +167,9 @@ class Window(QMainWindow):
         return button
 
     def _build(self) -> None:
+        about = QAction("About Timeshow", self)
+        about.triggered.connect(self.show_about)
+        self.menuBar().addMenu("Help").addAction(about)
         root = QWidget()
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
@@ -172,13 +183,18 @@ class Window(QMainWindow):
         header.addWidget(self.mode_label)
         layout.addLayout(header)
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter = splitter
+        splitter.setChildrenCollapsible(False)
+        splitter.splitterMoved.connect(lambda *_: self._resize_preview())
         layout.addWidget(splitter, 1)
         display = QWidget()
         pane = QVBoxLayout(display)
         pane.setContentsMargins(0, 0, 16, 0)
         self.preview = QLabel("Add an album, refresh photos, then press Start.")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview.setMinimumSize(400, 260)
+        self.preview.setMinimumSize(160, 100)
+        self.preview.setWordWrap(True)
+        self.preview.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         self.preview.setStyleSheet("background: #18212a; color: #d8e2e8; border-radius: 12px; padding: 16px;")
         pane.addWidget(self.preview, 1)
         self.info = QLabel("No photo displayed")
@@ -199,11 +215,11 @@ class Window(QMainWindow):
         pane.addWidget(self.exclude_button)
         splitter.addWidget(display)
         self.tabs = QTabWidget()
-        self.tabs.setMinimumWidth(310)
-        self.tabs.setMaximumWidth(420)
+        self.tabs.setMinimumSize(280, 160)
         splitter.addWidget(self.tabs)
         self._album_tab()
         self._settings_tab()
+        self._filters_tab()
         splitter.setSizes([740, 340])
         self.status = QLabel("Ready. Rotation starts only when you ask.")
         self.status.setWordWrap(True)
@@ -213,7 +229,7 @@ class Window(QMainWindow):
     def _album_tab(self) -> None:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        intro = QLabel("Choose which albums to include. Their links stay encrypted in your local vault.")
+        intro = QLabel("Choose which albums to include. Their links are stored securely on this computer.")
         intro.setWordWrap(True)
         layout.addWidget(intro)
         self.albums = QListWidget()
@@ -239,7 +255,14 @@ class Window(QMainWindow):
         note = QLabel("Anyone who obtains a shared link can access its album. Disable link sharing in Google Photos to revoke it.")
         note.setWordWrap(True)
         layout.addWidget(note)
-        self.tabs.addTab(panel, "Albums")
+        self._add_tab(panel, "Albums")
+
+    def _add_tab(self, panel: QWidget, title: str) -> None:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setWidget(panel)
+        self.tabs.addTab(scroll, title)
 
     def _settings_tab(self) -> None:
         panel = QWidget()
@@ -247,18 +270,12 @@ class Window(QMainWindow):
         form = QFormLayout()
         self.interval = QSpinBox()
         self.interval.setRange(1, 1439)
-        self.interval.setSuffix(" minutes")
+        self.interval.setSuffix(" min")
         form.addRow("Change every", self.interval)
         self.fit = QComboBox()
         self.fit.addItem("Fill screen (crop)", "fill")
         self.fit.addItem("Fit whole photo", "fit")
         form.addRow("Framing", self.fit)
-        self.after = QLineEdit()
-        self.after.setPlaceholderText("YYYY-MM-DD, optional")
-        self.before = QLineEdit()
-        self.before.setPlaceholderText("YYYY-MM-DD, optional")
-        form.addRow("Taken on/after (UTC)", self.after)
-        form.addRow("Taken on/before (UTC)", self.before)
         layout.addLayout(form)
         apply = QPushButton("Save settings")
         apply.clicked.connect(self.save_settings)
@@ -274,13 +291,65 @@ class Window(QMainWindow):
         layout.addWidget(note)
         reset = QPushButton("Reset viewing history…")
         reset.clicked.connect(self.reset_history)
-        layout.addWidget(reset)
+        history_row = QHBoxLayout()
+        history_row.addWidget(reset)
+        self._button("Open Config", self.open_config, history_row)
+        layout.addLayout(history_row)
         restore = QPushButton("Restore excluded photos…")
         restore.clicked.connect(self.restore_excluded)
         layout.addWidget(restore)
         layout.addStretch()
         layout.addWidget(QLabel("Timeshow · MIT license · Provided as is"))
-        self.tabs.addTab(panel, "Settings")
+        self._add_tab(panel, "Settings")
+
+    def _filters_tab(self) -> None:
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        intro = QLabel("Only photos taken between these dates. Both days are included. Dates use your local time zone.")
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+        form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        self.after = self._date_field()
+        self.before = self._date_field()
+        for title, field in [("From", self.after), ("To", self.before)]:
+            row = QHBoxLayout()
+            row.addWidget(field, 1)
+            self._button("Clear", lambda checked=False, editor=field: editor.setDate(editor.minimumDate()), row)
+            form.addRow(title, row)
+        layout.addLayout(form)
+        for text in (
+            "From includes that date and all later dates. To includes that date and all earlier dates. Use the calendar to choose a date.",
+            "Dates use year-month-day: 2024-03-15 means March 15, 2024.",
+            "No limit allows any date on that side. Use Clear to remove a limit. Photos without a known capture date are skipped while a limit is set.",
+            "Filters apply to enabled albums. Previously shown and excluded photos stay out of automatic rotation.",
+        ):
+            note = QLabel(text)
+            note.setWordWrap(True)
+            layout.addWidget(note)
+        apply = QPushButton("Save filters")
+        apply.clicked.connect(self.save_settings)
+        layout.addWidget(apply)
+        self.filter_counts = QLabel()
+        self.filter_counts.setWordWrap(True)
+        layout.addWidget(self.filter_counts)
+        layout.addStretch()
+        self._add_tab(panel, "Filters")
+
+    def _date_field(self) -> QDateEdit:
+        field = QDateEdit()
+        field.setCalendarPopup(True)
+        field.setDisplayFormat("yyyy-MM-dd")
+        field.setMinimumDate(QDate(100, 1, 1))
+        field.setSpecialValueText("No limit")
+        field.setDate(field.minimumDate())
+        def show_current_month(value: QDate) -> None:
+            if value == field.minimumDate():
+                today = QDate.currentDate()
+                field.calendarWidget().setCurrentPage(today.year(), today.month())
+        field.dateChanged.connect(show_current_month)
+        show_current_month(field.date())
+        return field
 
     def _tray(self) -> None:
         self.tray = QSystemTrayIcon(self.windowIcon(), self)
@@ -308,10 +377,12 @@ class Window(QMainWindow):
         state = self.player.state
         self.interval.setValue(max(1, state["interval"] // 60))
         self.fit.setCurrentIndex(self.fit.findData(state["fit"]))
-        self.after.setText(state.get("after", ""))
-        self.before.setText(state.get("before", ""))
+        for field, name in [(self.after, "after"), (self.before, "before")]:
+            value = state.get(name, "")
+            field.setDate(QDate.fromString(value, "yyyy-MM-dd") if value else field.minimumDate())
         mode = Vault.mode(self.player.vault.directory)
-        self.protection.setText(f"Vault protection: {mode}.\nPrivate data: {self.player.vault.directory}")
+        protection = {"password": "Password", "tpm2": "TPM2 (experimental)"}.get(mode, "Your system account")
+        self.protection.setText(f"Photo data protection: {protection}.\nPrivate data: {self.player.vault.directory}")
 
     def refresh_albums(self) -> None:
         self.albums.blockSignals(True)
@@ -329,6 +400,15 @@ class Window(QMainWindow):
         state = self.player.state
         self.counts.setText(f"{len(self.player.eligible())} eligible · {self.player.remaining()} unseen\n"
                             f"{len(state['seen'])} shown · {len(state['excluded'])} excluded")
+        enabled = {album["id"] for album in state["albums"] if album["enabled"]}
+        excluded = set(state["excluded"])
+        photos = [photo for key, photo in state["images"].items()
+                  if key not in excluded and enabled.intersection(photo["album_ids"])]
+        undated = sum(photo["capture_time_ms"] is None for photo in photos)
+        self.filter_counts.setText(
+            f"{len(self.player.eligible())} of {len(photos)} photos match ({undated} have no date). "
+            "Counts use saved filters and enabled albums, excluding removed photos."
+        )
 
     def _update_controls(self) -> None:
         current = self.player.current is not None
@@ -426,7 +506,7 @@ class Window(QMainWindow):
         self._resize_preview()
         day = "Unknown date"
         if photo.capture_time_ms is not None:
-            day = datetime.fromtimestamp(photo.capture_time_ms / 1000, timezone.utc).strftime("%Y-%m-%d")
+            day = datetime.fromtimestamp(photo.capture_time_ms / 1000).strftime("%Y-%m-%d")
         self.info.setText(f"{photo.album or 'Photo'} · {photo.width} × {photo.height} · {day}")
         self.status.setText(f"Photo displayed. {self.player.remaining()} unseen photos remain.")
 
@@ -439,6 +519,12 @@ class Window(QMainWindow):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
+        if hasattr(self, "splitter"):
+            narrow = self.width() < 900
+            orientation = Qt.Orientation.Vertical if narrow else Qt.Orientation.Horizontal
+            if self.splitter.orientation() != orientation:
+                self.splitter.setOrientation(orientation)
+                self.splitter.setSizes([300, 360] if narrow else [740, 340])
         self._resize_preview()
 
     def next_photo(self) -> None:
@@ -453,16 +539,22 @@ class Window(QMainWindow):
         if self.busy:
             return
         def change():
-            running = self.player.state.get("running", False)
-            if running:
+            action = "pause" if self.player.state.get("running", False) else "resume"
+            if self.isolated:
+                try:
+                    run_worker(action, self.player.vault.session_key())
+                finally:
+                    self.player.reload()
+                return self.player.restore_current() if action == "resume" else None
+            try:
+                perform(self.player, action, self.scheduler)
+            except CollectionExhausted:
                 self.scheduler.disable()
-            else:
-                if self.isolated and Vault.mode(self.player.vault.directory) == "password":
-                    raise PhotosError("Background switching needs system credentials, DPAPI, or TPM2. Password vaults support manual Next and Previous.")
-                self.scheduler.enable(self.player.state["interval"])
-            self.player.state["running"] = not running
-            self.player.save()
-        self._submit("Updating the user schedule…", change)
+                self.player.state["running"] = False
+                self.player.save()
+                raise
+            return self.player.current if action == "resume" else None
+        self._submit("Updating the user schedule…", change, self._display, external=self.isolated)
 
     def add_album(self) -> None:
         label, url = self.album_name.text(), self.album_url.text().strip()
@@ -489,14 +581,25 @@ class Window(QMainWindow):
                      lambda count: self.status.setText(f"Photo list updated: {count} eligible images."))
 
     def save_settings(self) -> None:
-        values = (self.interval.value() * 60, self.fit.currentData(), self.after.text().strip(),
-                  self.before.text().strip(), 1)
+        dates = [field.date().toString("yyyy-MM-dd") if field.date() != field.minimumDate() else ""
+                 for field in (self.after, self.before)]
+        if dates[0] and dates[1] and dates[0] > dates[1]:
+            self.status.setText("From must be on or before To.")
+            return
+        values = (self.interval.value() * 60, self.fit.currentData(), *dates, 1)
         def configure():
             if self.player.state.get("running", False):
                 self.scheduler.enable(values[0])
             self.player.state["screen_size"] = list(self.player.screen_size)
             self.player.configure(*values)
         self._submit("Saving settings…", configure)
+
+    def open_config(self) -> None:
+        directory = self.player.vault.directory
+        def open_folder():
+            private_directory(directory)
+            self.player.desktop.open_folder(directory)
+        self._submit("Opening the config folder…", open_folder)
 
     def open_web(self) -> None:
         self._submit("Opening the source album…", self.player.open_current_album)
@@ -537,6 +640,12 @@ class Window(QMainWindow):
         self.activateWindow()
         self.tabs.setCurrentIndex(1)
 
+    def show_about(self) -> None:
+        QMessageBox.about(self, "About Timeshow",
+                          f"Timeshow {APP_VERSION}\n\n"
+                          "Rotate desktop wallpaper from your photo albums.\n"
+                          "MIT license · Provided as is.")
+
     def tray_activated(self, reason) -> None:
         if reason in {QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick}:
             self.showNormal()
@@ -565,6 +674,7 @@ class Window(QMainWindow):
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("Timeshow")
+    app.setDesktopFileName("timeshow")
     app.setOrganizationName("Timeshow")
     app.setWindowIcon(app_icon())
     try:
@@ -573,10 +683,18 @@ def main() -> int:
         lock = QLockFile(str(directory / "gui.lock"))
         if not lock.tryLock(100):
             raise PhotosError("Timeshow is already running. Open it from the tray.")
-        dialog = UnlockDialog(directory)
-        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.vault is None:
-            return 0
-        window = Window(Player(dialog.vault, Desktop(), runtime_directory()))
+        cache = app_directory() / "cache"
+        vault = _initialize_storage(directory, cache)
+        if vault is None:
+            if Vault.mode(directory) == "password":
+                dialog = UnlockDialog(directory, cache)
+                if dialog.exec() != QDialog.DialogCode.Accepted or dialog.vault is None:
+                    return 0
+                vault = dialog.vault
+            else:
+                with operation_lock(directory):
+                    vault = open_vault(directory, cache)
+        window = Window(Player(vault, Desktop(), runtime_directory()))
         app.setQuitOnLastWindowClosed(True)
         spawn("tray")
         window.show()

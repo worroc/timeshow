@@ -62,6 +62,9 @@ def perform(player: Player, action: str, scheduler: Scheduler) -> bool:
         scheduler.enable(player.state["interval"])
         player.state["running"] = True
         player.save()
+        if not player.state["images"]:
+            player.refresh()
+        player.next()
     return True
 
 

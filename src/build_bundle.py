@@ -10,14 +10,22 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tomllib
 
 
 def main() -> int:
     project = Path(__file__).resolve().parent.parent
+    version = tomllib.loads((project / "pyproject.toml").read_text())["project"]["version"]
+    version_file = project / "build/timeshow-version/_version.txt"
+    version_file.parent.mkdir(parents=True, exist_ok=True)
+    version_file.write_text(version + "\n")
     subprocess.run([
         sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir",
         "--windowed", "--name", "Timeshow", "--paths", str(project / "src"),
         "--copy-metadata", "keyring",
+        "--add-data", str(project / "src/timeshow/assets") + ":timeshow/assets",
+        "--add-data", str(version_file) + ":timeshow",
+        "--icon", str(project / "src/timeshow/assets/timeshow.ico"),
         "--hidden-import", "timeshow.worker", "--hidden-import", "timeshow.tray",
         "--hidden-import", "timeshow.gui.window", str(project / "src/desktop_main.py"),
     ], cwd=project, check=True)

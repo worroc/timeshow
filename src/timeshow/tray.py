@@ -83,6 +83,7 @@ class Tray:
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("Timeshow tray")
+    app.setDesktopFileName("timeshow")
     app.setQuitOnLastWindowClosed(False)
     if not QSystemTrayIcon.isSystemTrayAvailable():
         return 0

@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from timeshow.desktop import app_directory, config_directory
+from timeshow.desktop import Desktop, app_directory, config_directory
 from timeshow.photos import PhotosError
 from timeshow.processes import operation_lock
 from timeshow.scheduling import Scheduler, public_settings, publish_settings
@@ -22,6 +22,13 @@ class RecordingScheduler(Scheduler):
 
 
 class SchedulingTests(unittest.TestCase):
+    def test_open_folder_opens_directory_itself_on_each_platform(self):
+        folder = Path("synthetic-config").resolve()
+        for platform, executable in [("linux", "xdg-open"), ("win32", "explorer.exe")]:
+            with patch("sys.platform", platform), patch("timeshow.desktop.platform.run_command") as run:
+                Desktop().open_folder(folder)
+                run.assert_called_once_with([executable, str(folder)])
+
     def test_linux_paths_follow_xdg_separation(self):
         with patch("sys.platform", "linux"), patch.dict(os.environ, {
             "XDG_CONFIG_HOME": "/tmp/synthetic-config", "XDG_DATA_HOME": "/tmp/synthetic-data",
@@ -57,6 +64,17 @@ class SchedulingTests(unittest.TestCase):
             self.assertIn("LIMITED", arguments)
             self.assertNotIn("HIGHEST", arguments)
             self.assertEqual(arguments[arguments.index("/MO") + 1], "2")
+
+    def test_deb_install_uses_package_service_and_only_writes_user_timer(self):
+        with tempfile.TemporaryDirectory() as temporary, patch("sys.platform", "linux"), patch(
+            "sys.frozen", True, create=True
+        ), patch("sys.executable", "/opt/timeshow/Timeshow"), patch.object(Path, "is_file", return_value=True):
+            root = Path(temporary)
+            scheduler = RecordingScheduler(root / "timeshow")
+            scheduler.enable(300)
+            self.assertTrue((root / "systemd/user/timeshow.timer").exists())
+            self.assertFalse((root / "systemd/user/timeshow.service").exists())
+            self.assertTrue(all(call[:2] == ["systemctl", "--user"] for call in scheduler.calls))
 
     def test_invalid_interval_never_registers_a_task(self):
         with tempfile.TemporaryDirectory() as temporary:

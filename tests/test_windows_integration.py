@@ -11,8 +11,9 @@ import unittest
 
 from cryptography.fernet import Fernet
 
+from timeshow._setup import _initialize_storage
 from timeshow.photos import PhotosError
-from timeshow.security import DPAPIProtector, Vault
+from timeshow.security import DPAPIProtector
 
 
 @unittest.skipUnless(sys.platform == "win32", "Requires native Windows APIs")
@@ -20,7 +21,7 @@ class WindowsIntegrationTests(unittest.TestCase):
     def test_dpapi_vault_reopens_in_an_unattended_child(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            vault = Vault.open(root / "config", DPAPIProtector(), root / "cache")
+            vault = _initialize_storage(root / "config", root / "cache")
             state = vault.load_state()
             state["seen"] = ["synthetic-shown-image"]
             vault.save_state(state)

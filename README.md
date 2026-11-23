@@ -3,6 +3,7 @@
 A personal wallpaper changer for Windows and Linux. Add Google Photos shared
 album links, select which albums to use, and rotate photos randomly at an interval.
 The project is MIT licensed and provided **as is**, without warranty.
+The window title and **Help → About Timeshow** show the app version.
 
 ## Install from a checkout
 
@@ -38,12 +39,18 @@ uv run --extra gui timeshow-gui
 
 ## Use
 
-1. Create an encrypted local vault. Choose a password, system credential store,
-   Windows account protection, or Linux TPM2 protection.
+1. Open Timeshow. Secure local storage is set up automatically for your account.
 2. Add one or more link-shared albums on the Albums tab. The link field is hidden.
 3. Press **Refresh photo list**. All pages must load before the new list is saved.
-4. Set the interval, framing, and optional capture-date range.
-5. Press **Start**, or **Next** for a single wallpaper change.
+4. Set the interval and framing in Settings. Choose an optional date range in Filters.
+5. Press **Start** to change the wallpaper immediately and begin rotation, or **Next** for one change.
+
+The Filters tab has calendar pickers and explanations. Both end dates are included.
+Clear a date for no limit. Photos without a capture date are skipped while a limit
+is set. The match count uses saved filters and enabled albums, excluding removed
+photos. Capture dates and photo information now use your local time zone instead
+of UTC. Photos near midnight may therefore match a different day than before.
+In Settings, **Open Config** opens your config folder beside **Reset viewing history**.
 
 Next chooses an unseen image. History survives restarts and image deletion.
 Previous explicitly revisits history; Next moves forward through it before choosing
@@ -93,8 +100,15 @@ metadata and history. Album links and photo identities never enter settings.json
 The older GUI vault path is not automatically moved or overwritten.
 
 Album links, candidate metadata, and viewing history use authenticated encryption.
-Settings and downloaded images are plaintext. The vault key is protected by the
-selected method:
+Settings and downloaded images are plaintext. New installations protect the
+encryption key automatically with Windows account protection (DPAPI) or the
+Linux desktop's secure credential store. Users do not need to create a vault or
+choose a protection method. The checkout installers set this up before creating
+shortcuts. Packaged applications do it on first launch. Linux needs an installed,
+unlocked secure desktop password store; setup fails clearly if it is unavailable.
+There is no fallback to plaintext storage.
+
+Existing encrypted storage keeps its original protection method:
 
 - **Password:** portable; entered when the GUI opens; at least 12 characters.
   Manual Next/Previous can pass the unlocked key to a child worker over stdin.
@@ -128,6 +142,20 @@ encryption does not change Google's sharing rules. Disable link sharing in Googl
 Photos to revoke a link. Do not put album links or personal data into source,
 issues, screenshots, or logs. No telemetry is implemented.
 
+## Uninstall on Linux
+
+Run `./uninstall.sh` from the checkout as your normal user. It stops this checkout's
+GUI and tray, disables rotation, removes user launchers, the icon, scheduler files,
+and the checkout's `.venv`. It asks before deleting settings, albums, history,
+downloaded images, rendered wallpapers, and the saved credential-store key.
+The default answer keeps user data. No administrator access is needed.
+
+Use `./uninstall.sh --keep-data` without a prompt, or `./uninstall.sh --yes` to
+also delete user data. A credential-store failure keeps data for a retry.
+The checkout, exported images, and `.private/` PoC files are kept. Select another
+wallpaper in desktop Settings if needed. This helper removes checkout installs.
+For a `.deb` install, use the package-manager commands below.
+
 ## Download PoC
 
 The original dependency-free CLI remains available:
@@ -156,10 +184,59 @@ files. Run `Timeshow.exe` on Windows or `Timeshow` on Linux. The application use
 dynamic Qt libraries; bundled third-party components retain their own licenses.
 Build Linux packages on the oldest supported distribution, not a newer system.
 
+### Debian and Ubuntu package
+
+Build on Debian or Ubuntu with `dpkg-deb` installed:
+
+```sh
+uv run --extra gui --group build python src/build_deb.py
+```
+
+This reuses the bundle builder and creates `dist/timeshow_0.1.0_amd64.deb`
+on an amd64 machine. Both the package version and filename come from
+`pyproject.toml`; the architecture comes from the build machine. Build on each
+target architecture. To package a fresh bundle that was already built:
+
+```sh
+uv run --extra gui --group build python src/build_deb.py --bundle dist/Timeshow
+```
+
+The build checks that the bundled UI version matches `pyproject.toml`. Rebuild
+the desktop bundle after changing the version.
+
+The package includes Python, dependencies, license notices, desktop icons,
+application launchers, tray login startup, and a systemd **user** service.
+Only the timer and user settings are written in the user's home folder.
+It requires the build machine's glibc version or newer, so build on the oldest
+Ubuntu/Debian release you want to support. CI builds on Ubuntu 22.04.
+
+Building needs no administrator access. System-wide package installation and
+removal use the normal package manager and require administrator access:
+
+```sh
+sudo apt install ./dist/timeshow_0.1.0_amd64.deb
+sudo apt remove timeshow
+# To also remove package-owned system configuration:
+sudo apt purge timeshow
+```
+
+Run `timeshow` or open Timeshow from the application menu. Python and uv are not
+needed on the target machine. Wallpaper changes and scheduling run as the logged-in
+user. Installing does not enable wallpaper rotation.
+
+Before moving from a checkout install, run `./uninstall.sh --keep-data` there to
+remove its old launchers and user service. The package uses the same user data
+locations. Pause rotation and close Timeshow before removing or upgrading it.
+Remove/purge keep each user's settings, encrypted albums/history, image cache,
+and credential-store key. Package scripts do not inspect or delete home folders.
+The existing checkout installer remains available for installation without sudo.
+
 The GitHub Actions workflow runs checks and builds separate Windows and Linux
 artifacts. It does not publish a release or upload local data. Release binaries
-are not code-signed by this project. The repository has no configured GitHub
-remote yet; Issues and a Kanban project can be connected when it has one.
+are not code-signed by this project. The repository is hosted at
+[worroc/timeshow](https://github.com/worroc/timeshow). Open tasks are tracked in
+[GitHub Issues](https://github.com/worroc/timeshow/issues), including validation
+on real Windows and Ubuntu desktops and optional Linux TPM2 protection.
 
 ## Structure and tests
 

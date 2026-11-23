@@ -44,7 +44,11 @@ class Scheduler:
         timer = ("[Unit]\nDescription=Timeshow user wallpaper timer\n"
                  f"[Timer]\nOnActiveSec={interval}s\nOnUnitActiveSec={interval}s\nAccuracySec=1s\n"
                  "[Install]\nWantedBy=timers.target\n")
-        write_private(units / "timeshow.service", service.encode())
+        packaged = (getattr(sys, "frozen", False)
+                    and Path(sys.executable) == Path("/opt/timeshow/Timeshow")
+                    and Path("/usr/lib/systemd/user/timeshow.service").is_file())
+        if not packaged:
+            write_private(units / "timeshow.service", service.encode())
         write_private(units / "timeshow.timer", timer.encode())
         environment = [name for name in ["DISPLAY", "WAYLAND_DISPLAY", "XDG_CURRENT_DESKTOP"] if name in os.environ]
         if environment:
