@@ -8,6 +8,18 @@ Windows shortcuts and bundle builds use the ICO. Automated checks cover Linux
 launcher generation, icon sizes, and Qt rendering. Ubuntu dock/menu and native
 Windows appearance still need retesting. Rerun install.sh to update launchers.
 
+The Ubuntu tester later reported a missing desktop icon with the .deb install.
+The original package was checked: its SVG asset and Icon=timeshow entries were
+present. The installed shortcut was not available for inspection, so the exact
+failure on the test machine is still unconfirmed.
+
+The .deb launchers now point directly to /usr/share/pixmaps/timeshow.png.
+The PNG is generated from the existing logo during packaging. A named PNG is
+also installed in hicolor/256x256/apps for dock entries and existing shortcuts.
+Package tests resolve each launcher's icon path inside the archive and check
+that it is a readable, nonempty 256x256 PNG. The fix ships in patch version 0.1.1.
+Install timeshow_0.1.1_amd64.deb to retest.
+
 ## Observed
 
 Installed with `./install.sh` on Ubuntu, GNOME, Wayland.

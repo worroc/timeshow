@@ -10,6 +10,8 @@ import tempfile
 import tomllib
 import unittest
 
+from PIL import Image
+
 from build_deb import _check_bundle, main
 
 
@@ -53,10 +55,23 @@ class DebianPackageTests(unittest.TestCase):
                 "usr/bin/timeshow", "usr/bin/timeshow-tray", "usr/bin/timeshow-worker",
                 "usr/share/applications/timeshow.desktop", "usr/lib/systemd/user/timeshow.service",
                 "usr/share/icons/hicolor/scalable/apps/timeshow.svg",
+                "usr/share/icons/hicolor/256x256/apps/timeshow.png",
+                "usr/share/pixmaps/timeshow.png",
                 "etc/xdg/autostart/timeshow-tray.desktop", "usr/share/doc/timeshow/copyright",
             ):
                 self.assertIn("./" + name, names)
             self.assertFalse(any(name.startswith(("./home/", "./root/")) for name in names))
+            for launcher in ("usr/share/applications/timeshow.desktop", "etc/xdg/autostart/timeshow-tray.desktop"):
+                text = archive.extractfile("./" + launcher).read().decode()
+                icon_path = next(line.removeprefix("Icon=") for line in text.splitlines()
+                                 if line.startswith("Icon="))
+                self.assertEqual(icon_path, "/usr/share/pixmaps/timeshow.png")
+                member = archive.getmember("." + icon_path)
+                self.assertEqual(member.mode & 0o777, 0o644)
+                with Image.open(BytesIO(archive.extractfile(member).read())) as icon:
+                    self.assertEqual(icon.format, "PNG")
+                    self.assertEqual(icon.size, (256, 256))
+                    self.assertIsNotNone(icon.getchannel("A").getbbox())
         control = self.root / "control"
         subprocess.run(["dpkg-deb", "--control", str(package), str(control)], check=True)
         for script in ("postinst", "postrm"):

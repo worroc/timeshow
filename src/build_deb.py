@@ -14,6 +14,8 @@ import sys
 import tempfile
 import tomllib
 
+from PIL import Image
+
 from build_bundle import main as build_bundle
 
 
@@ -32,7 +34,7 @@ Type=Application
 Name=Timeshow
 Comment=Rotate photos from your selected albums
 Exec=/usr/bin/timeshow
-Icon=timeshow
+Icon=/usr/share/pixmaps/timeshow.png
 StartupWMClass=timeshow
 Terminal=false
 Categories=Graphics;
@@ -43,7 +45,7 @@ AUTOSTART = """[Desktop Entry]
 Type=Application
 Name=Timeshow tray
 Exec=/usr/bin/timeshow-tray
-Icon=timeshow
+Icon=/usr/share/pixmaps/timeshow.png
 Terminal=false
 """
 
@@ -79,6 +81,20 @@ def _check_bundle(bundle: Path) -> None:
             raise ValueError("Bundle contains local state or private inputs.")
 
 
+def _stage_icon(project: Path, root: Path) -> None:
+    # Use the existing multi-size logo. PNG needs no SVG loader or theme lookup.
+    destination = root / "usr/share/pixmaps/timeshow.png"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with Image.open(project / "src/timeshow/assets/timeshow.ico") as icon:
+        icon.convert("RGBA").save(destination, format="PNG")
+    destination.chmod(0o644)
+    # Keep named icons working for dock entries and existing desktop shortcuts.
+    themed = root / "usr/share/icons/hicolor/256x256/apps/timeshow.png"
+    themed.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(destination, themed)
+    themed.chmod(0o644)
+
+
 def _stage(project: Path, bundle: Path, root: Path, version: str, architecture: str) -> None:
     _check_bundle(bundle)
     bundled_version = bundle / "_internal/timeshow/_version.txt"
@@ -99,6 +115,7 @@ def _stage(project: Path, bundle: Path, root: Path, version: str, architecture: 
     _write(root, "usr/lib/systemd/user/timeshow.service", SERVICE)
     _write(root, "usr/share/icons/hicolor/scalable/apps/timeshow.svg",
            (project / "src/timeshow/assets/timeshow.svg").read_text())
+    _stage_icon(project, root)
     _write(root, "usr/share/doc/timeshow/copyright", (project / "LICENSE").read_text())
     _write(root, "DEBIAN/conffiles", "/etc/xdg/autostart/timeshow-tray.desktop\n")
     for name in ("postinst", "postrm"):

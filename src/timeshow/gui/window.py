@@ -35,7 +35,8 @@ class UnlockDialog(QDialog):
         self.cache_directory = cache_directory if cache_directory is not None else app_directory() / "cache"
         self.vault: Vault | None = None
         self.existing_mode = Vault.mode(directory)
-        self.setWindowTitle("Unlock Timeshow" if self.existing_mode else "Welcome to Timeshow")
+        title = "Unlock Timeshow" if self.existing_mode else "Welcome to Timeshow"
+        self.setWindowTitle(f"{title} {APP_VERSION}")
         self.setMinimumWidth(440)
         layout = QVBoxLayout(self)
         title = QLabel("Enter your Timeshow password" if self.existing_mode else "Protect your photo data")
@@ -180,6 +181,7 @@ class Window(QMainWindow):
         header.addWidget(name)
         header.addStretch()
         self.mode_label = QLabel("Paused")
+        self.mode_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header.addWidget(self.mode_label)
         layout.addLayout(header)
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -299,7 +301,7 @@ class Window(QMainWindow):
         restore.clicked.connect(self.restore_excluded)
         layout.addWidget(restore)
         layout.addStretch()
-        layout.addWidget(QLabel("Timeshow · MIT license · Provided as is"))
+        layout.addWidget(QLabel(f"Timeshow {APP_VERSION} · MIT license · Provided as is"))
         self._add_tab(panel, "Settings")
 
     def _filters_tab(self) -> None:
@@ -353,7 +355,7 @@ class Window(QMainWindow):
 
     def _tray(self) -> None:
         self.tray = QSystemTrayIcon(self.windowIcon(), self)
-        self.tray.setToolTip("Timeshow — paused")
+        self.tray.setToolTip(f"Timeshow {APP_VERSION} — paused")
         menu = QMenu(self)
         self.tray_actions = {}
         for name, text, callback in [
@@ -419,7 +421,12 @@ class Window(QMainWindow):
             button.setEnabled(current and not self.busy)
         self.start_button.setText("Pause" if self.running else "Start")
         self.mode_label.setText("Running" if self.running else "Paused")
-        self.tray.setToolTip("Timeshow — " + ("running" if self.running else "paused"))
+        background = "#247a45" if self.running else "#626970"
+        self.mode_label.setStyleSheet(
+            f"background-color: {background}; color: white; "
+            "font-weight: 600; padding: 6px 12px; border-radius: 8px;"
+        )
+        self.tray.setToolTip(f"Timeshow {APP_VERSION} — " + ("running" if self.running else "paused"))
         for name in ["next", "previous", "toggle", "web"]:
             self.tray_actions[name].setEnabled(not self.busy and (current or name != "web"))
         self.tray_actions["toggle"].setText("Pause" if self.running else "Start")
@@ -641,7 +648,7 @@ class Window(QMainWindow):
         self.tabs.setCurrentIndex(1)
 
     def show_about(self) -> None:
-        QMessageBox.about(self, "About Timeshow",
+        QMessageBox.about(self, f"About Timeshow {APP_VERSION}",
                           f"Timeshow {APP_VERSION}\n\n"
                           "Rotate desktop wallpaper from your photo albums.\n"
                           "MIT license · Provided as is.")
@@ -674,6 +681,7 @@ class Window(QMainWindow):
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("Timeshow")
+    app.setApplicationVersion(APP_VERSION)
     app.setDesktopFileName("timeshow")
     app.setOrganizationName("Timeshow")
     app.setWindowIcon(app_icon())

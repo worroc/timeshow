@@ -7,6 +7,7 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from .desktop import config_directory
+from ._version import APP_VERSION
 from .processes import command, spawn
 from .scheduling import public_settings
 from .storage import private_directory
@@ -36,9 +37,9 @@ class Tray:
         try:
             running = public_settings().get("running", False)
             self.actions["toggle"].setText("Pause" if running else "Start")
-            self.icon.setToolTip("Timeshow — " + ("scheduled" if running else "paused"))
+            self.icon.setToolTip(f"Timeshow {APP_VERSION} — " + ("scheduled" if running else "paused"))
         except Exception:
-            self.icon.setToolTip("Timeshow — open Settings to check configuration")
+            self.icon.setToolTip(f"Timeshow {APP_VERSION} — open Settings to check configuration")
 
     def clicked(self, reason) -> None:
         if reason in {QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick}:
@@ -83,6 +84,7 @@ class Tray:
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("Timeshow tray")
+    app.setApplicationVersion(APP_VERSION)
     app.setDesktopFileName("timeshow")
     app.setQuitOnLastWindowClosed(False)
     if not QSystemTrayIcon.isSystemTrayAvailable():

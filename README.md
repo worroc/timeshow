@@ -3,7 +3,9 @@
 A personal wallpaper changer for Windows and Linux. Add Google Photos shared
 album links, select which albums to use, and rotate photos randomly at an interval.
 The project is MIT licensed and provided **as is**, without warranty.
-The window title and **Help → About Timeshow** show the app version.
+The window title, **Help → About Timeshow**, and tray tooltip show the app
+version. Close the app and quit its tray after upgrading, then reopen it to load
+the new version.
 
 ## Install from a checkout
 
@@ -192,7 +194,7 @@ Build on Debian or Ubuntu with `dpkg-deb` installed:
 uv run --extra gui --group build python src/build_deb.py
 ```
 
-This reuses the bundle builder and creates `dist/timeshow_0.1.0_amd64.deb`
+This reuses the bundle builder and creates `dist/timeshow_0.1.1_amd64.deb`
 on an amd64 machine. Both the package version and filename come from
 `pyproject.toml`; the architecture comes from the build machine. Build on each
 target architecture. To package a fresh bundle that was already built:
@@ -214,7 +216,7 @@ Building needs no administrator access. System-wide package installation and
 removal use the normal package manager and require administrator access:
 
 ```sh
-sudo apt install ./dist/timeshow_0.1.0_amd64.deb
+sudo apt install ./dist/timeshow_0.1.1_amd64.deb
 sudo apt remove timeshow
 # To also remove package-owned system configuration:
 sudo apt purge timeshow

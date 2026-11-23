@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 import unittest
 from unittest.mock import patch
 
@@ -21,7 +22,6 @@ except ModuleNotFoundError:
 
 from timeshow.photos import DownloadedImage, ImageCandidate, PhotosError
 from timeshow.worker import perform
-from timeshow._version import APP_VERSION
 
 ALBUM_URL = "https://photos.google.com/share/synthetic?key=synthetic"
 PASSWORD = "synthetic test password"
@@ -317,7 +317,7 @@ try:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtCore import QDate
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QPushButton
+    from PySide6.QtWidgets import QApplication, QLabel, QPushButton
     from timeshow.gui.window import UnlockDialog, Window, main as gui_main
     HAS_QT = True
 except ModuleNotFoundError:
@@ -415,12 +415,16 @@ class GuiTests(unittest.TestCase):
         self.assertFalse(self.window.windowIcon().pixmap(64, 64).isNull())
 
     def test_version_is_shown_in_title_and_about(self):
-        self.assertEqual(self.window.windowTitle(), f"Timeshow {APP_VERSION}")
+        project = Path(__file__).resolve().parents[1]
+        expected = tomllib.loads((project / "pyproject.toml").read_text())["project"]["version"]
+        self.assertEqual(self.window.windowTitle(), f"Timeshow {expected}")
+        self.assertIn("Timeshow", {label.text() for label in self.window.findChildren(QLabel)})
+        self.assertIn(expected, self.window.tray.toolTip())
         with patch("timeshow.gui.window.QMessageBox.about") as about:
             help_menu = self.window.menuBar().actions()[0].menu()
             help_menu.actions()[0].trigger()
-            self.assertEqual(about.call_args.args[1], "About Timeshow")
-            self.assertIn(APP_VERSION, about.call_args.args[2])
+            self.assertEqual(about.call_args.args[1], f"About Timeshow {expected}")
+            self.assertIn(f"Timeshow {expected}", about.call_args.args[2])
 
     def test_window_fits_half_screen_with_photo_and_each_tab(self):
         self.window.next_photo()
@@ -503,5 +507,7 @@ class GuiTests(unittest.TestCase):
             self.assertEqual(gui_main(), 0)
             self.assertEqual(gui_main(), 0)
             self.assertEqual(window.return_value.show.call_count, 2)
+            expected = tomllib.loads((Path(__file__).resolve().parents[1] / "pyproject.toml").read_text())["project"]["version"]
+            application.return_value.setApplicationVersion.assert_called_with(expected)
             dialog.assert_not_called()
             protect.assert_called_once()
