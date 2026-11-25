@@ -154,9 +154,9 @@ class PlayerTests(unittest.TestCase):
         self.assertEqual(len(self.player.eligible()), 1)
         self.assertEqual(self.player.next().body, dated.read_bytes())
         self.player.open_current_album()
-        self.assertEqual(self.desktop.opened, [dated.parent])
+        self.assertEqual(self.desktop.opened, [dated.parent.resolve()])
         for name in ("state.enc", "settings.json"):
-            self.assertNotIn(str(dated.parent).encode(), (self.vault.directory / name).read_bytes())
+            self.assertNotIn(str(dated.parent.resolve()).encode(), (self.vault.directory / name).read_bytes())
 
     def test_bad_local_listing_never_publishes_a_partial_refresh(self):
         photo = self.local_photo("first.jpg")
@@ -565,7 +565,7 @@ class GuiTests(unittest.TestCase):
             button.click()
         self.finish_job()
         self.assertEqual(self.window.albums.count(), 2)
-        self.assertEqual(self.player.state["albums"][1]["path"], str(folder))
+        self.assertEqual(self.player.state["albums"][1]["path"], str(folder.resolve()))
         self.window.refresh_photos()
         self.finish_job()
         self.assertEqual(len(self.player.eligible()), 4)
