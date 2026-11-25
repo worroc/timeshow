@@ -55,7 +55,7 @@ cat > "$autostart_dir/timeshow-tray.desktop" <<EOF
 Type=Application
 Name=Timeshow tray
 Icon=timeshow
-Exec="$project_dir/.venv/bin/timeshow-tray"
+Exec="$project_dir/.venv/bin/timeshow-tray" --login
 Terminal=false
 EOF
 if command -v update-desktop-database >/dev/null 2>&1; then

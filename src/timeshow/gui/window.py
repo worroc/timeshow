@@ -278,6 +278,9 @@ class Window(QMainWindow):
         self.interval.setRange(1, 1439)
         self.interval.setSuffix(" min")
         form.addRow("Change every", self.interval)
+        self.change_on_login = QCheckBox("Change on startup")
+        self.change_on_login.setToolTip("Change once at account login while rotation is running. Pause stops this too.")
+        form.addRow(self.change_on_login)
         self.fit = QComboBox()
         self.fit.addItem("Fill screen (crop)", "fill")
         self.fit.addItem("Fit whole photo", "fit")
@@ -384,6 +387,7 @@ class Window(QMainWindow):
     def _load_settings(self) -> None:
         state = self.player.state
         self.interval.setValue(max(1, state["interval"] // 60))
+        self.change_on_login.setChecked(state.get("change_on_login", False))
         self.fit.setCurrentIndex(self.fit.findData(state["fit"]))
         for field, name in [(self.after, "after"), (self.before, "before")]:
             value = state.get(name, "")
@@ -617,10 +621,14 @@ class Window(QMainWindow):
             self.status.setText("From must be on or before To.")
             return
         values = (self.interval.value() * 60, self.fit.currentData(), *dates, 1)
+        change_on_login = self.change_on_login.isChecked()
         def configure():
+            if change_on_login and Vault.mode(self.player.vault.directory) == "password":
+                raise PhotosError("Changing at account login needs system account protection. Password protection requires opening Timeshow manually.")
             if self.player.state.get("running", False):
                 self.scheduler.enable(values[0])
             self.player.state["screen_size"] = list(self.player.screen_size)
+            self.player.state["change_on_login"] = change_on_login
             self.player.configure(*values)
         self._submit("Saving settings…", configure)
 

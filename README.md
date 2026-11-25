@@ -122,6 +122,14 @@ uv run --extra gui timeshow-gui
 4. Set the interval and framing in Settings. Choose an optional date range in Filters.
 5. Press **Start** to change the wallpaper immediately and begin rotation, or **Next** for one change.
 
+In Settings, enable **Change on startup** and press **Save settings** to also
+change the wallpaper once when you log in to your computer account. It is off
+by default. Rotation must be running; Pause stops both login and timed changes.
+Opening Timeshow or restarting its tray manually does not trigger a login change.
+After a successful login change, the normal interval starts again. This option
+needs system account protection and updated login shortcuts from the installer.
+Intervals still use elapsed clock time; computer usage time is not counted yet.
+
 The Filters tab has calendar pickers and explanations. Both end dates are included.
 Clear a date for no limit. Photos without a capture date are skipped while a limit
 is set. The match count uses saved filters and enabled sources, excluding removed

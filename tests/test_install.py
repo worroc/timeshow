@@ -48,5 +48,7 @@ class InstallerTests(unittest.TestCase):
             self.assertIn("StartupWMClass=timeshow\n", desktop)
             self.assertIn(f'Exec="{checkout}/.venv/bin/timeshow-gui"', desktop)
             self.assertIn("Icon=timeshow\n", tray)
+            self.assertIn(f'Exec="{checkout}/.venv/bin/timeshow-tray" --login\n', tray)
+            self.assertNotIn("--login", desktop)
             self.assertEqual((root / "data/icons/hicolor/scalable/apps/timeshow.svg").read_bytes(),
                              (assets / "timeshow.svg").read_bytes())

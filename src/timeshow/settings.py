@@ -7,7 +7,8 @@ from .desktop import config_directory
 from .photos import PhotosError
 from .storage import write_json
 
-PUBLIC_FIELDS = frozenset({"running", "interval", "fit", "after", "before", "screen_size"})
+PUBLIC_FIELDS = frozenset({"running", "interval", "fit", "after", "before", "screen_size",
+                           "change_on_login"})
 
 
 def public_settings(directory: Path | None = None) -> dict:

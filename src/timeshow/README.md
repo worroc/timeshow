@@ -31,6 +31,7 @@ random photo. It needs no Google account credentials or API keys.
 - `gui/` provides the Qt window and system tray, with background workers.
 - `worker.py` performs one operation and exits; it never imports Qt.
 - `tray.py` provides only the resident tray; it never imports Pillow or the vault.
+  Its login launcher can request one worker when Change on startup is enabled.
 - `scheduling.py` registers per-user OS schedules.
 - `processes.py` launches roles and locks concurrent state changes. An unlocked
   password key can travel only through a child process's stdin pipe.

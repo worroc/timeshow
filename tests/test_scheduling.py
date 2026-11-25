@@ -86,9 +86,9 @@ class SchedulingTests(unittest.TestCase):
     def test_public_settings_never_include_album_links(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            publish_settings({"interval": 300, "running": True,
+            publish_settings({"interval": 300, "running": True, "change_on_login": True,
                               "albums": [{"url": "synthetic-secret"}]}, root)
-            self.assertEqual(public_settings(root), {"interval": 300, "running": True})
+            self.assertEqual(public_settings(root), {"interval": 300, "running": True, "change_on_login": True})
             self.assertNotIn("secret", (root / "settings.json").read_text())
 
     def test_overlapping_operations_are_rejected(self):

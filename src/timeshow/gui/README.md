@@ -24,6 +24,14 @@ config folder without exporting or decrypting data. Start switches immediately
 before the schedule continues. A failed switch leaves the schedule enabled for
 retry; exhausting the available photos pauses rotation.
 
+Settings has an optional Change on startup checkbox, off by default. It changes
+the photo at account login only while rotation is running. Pause stops both
+login and interval changes. Password-protected storage cannot enable this option.
+Login shortcuts pass `--login` to the tray. After obtaining its single-instance
+lock, the tray requests one `login` worker operation. Ordinary GUI/tray launches
+do not trigger it. The worker rechecks the saved settings under the operation
+lock, preserves history, and restarts the interval after a successful change.
+
 Startup creates secure storage automatically if the installer has not done so.
 Windows uses DPAPI; Linux uses the secure desktop credential store. Users do not
 choose a protection method. Existing storage is preserved and unlocked with its

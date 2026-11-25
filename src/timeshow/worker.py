@@ -31,14 +31,18 @@ def open_vault(directory: Path, cache: Path, session_key: bytes | None = None) -
 
 
 def perform(player: Player, action: str, scheduler: Scheduler) -> bool:
-    if action == "tick":
+    if action in {"tick", "login"}:
         if not player.state.get("running", False):
             return False
-        if time.time() - player.state.get("last_switch", 0) < player.state["interval"] - 2:
+        if action == "login" and not player.state.get("change_on_login", False):
+            return False
+        if action == "tick" and time.time() - player.state.get("last_switch", 0) < player.state["interval"] - 2:
             return False
         if not player.state["images"]:
             player.refresh()
         player.next()
+        if action == "login":
+            scheduler.enable(player.state["interval"])
     elif action == "next":
         player.next()
     elif action == "previous":
@@ -70,7 +74,7 @@ def perform(player: Player, action: str, scheduler: Scheduler) -> bool:
 
 def main(arguments: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Perform one wallpaper operation and exit.")
-    parser.add_argument("--action", default="tick", choices=["tick", "next", "previous", "refresh", "exclude", "web", "pause", "resume"])
+    parser.add_argument("--action", default="tick", choices=["tick", "login", "next", "previous", "refresh", "exclude", "web", "pause", "resume"])
     parser.add_argument("--session-key", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(arguments)
     directory = config_directory()

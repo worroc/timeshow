@@ -63,6 +63,10 @@ class DebianPackageTests(unittest.TestCase):
             self.assertFalse(any(name.startswith(("./home/", "./root/")) for name in names))
             for launcher in ("usr/share/applications/timeshow.desktop", "etc/xdg/autostart/timeshow-tray.desktop"):
                 text = archive.extractfile("./" + launcher).read().decode()
+                if "autostart" in launcher:
+                    self.assertIn("Exec=/usr/bin/timeshow-tray --login\n", text)
+                else:
+                    self.assertNotIn("--login", text)
                 icon_path = next(line.removeprefix("Icon=") for line in text.splitlines()
                                  if line.startswith("Icon="))
                 self.assertEqual(icon_path, "/usr/share/pixmaps/timeshow.png")

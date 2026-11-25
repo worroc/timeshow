@@ -239,6 +239,38 @@ class PlayerTests(unittest.TestCase):
         self.assertFalse(perform(self.player, "tick", FakeScheduler()))
         self.assertEqual(self.desktop.paths, [])
 
+    def test_login_changes_only_when_enabled_and_running(self):
+        for running, change in [(False, False), (False, True), (True, False)]:
+            with self.subTest(running=running, change=change):
+                self.player.state.update(running=running, change_on_login=change)
+                self.assertFalse(perform(self.player, "login", FakeScheduler()))
+                self.assertEqual(self.desktop.paths, [])
+        self.player.state.pop("change_on_login")
+        self.assertFalse(perform(self.player, "login", FakeScheduler()))
+
+    def test_login_changes_before_interval_and_restarts_interval(self):
+        old = self.player.next()
+        self.player.state.update(running=True, change_on_login=True, interval=7200)
+        scheduler = FakeScheduler()
+        self.assertTrue(perform(self.player, "login", scheduler))
+        self.assertNotEqual(self.player.current.media_id, old.media_id)
+        self.assertEqual(len(self.desktop.paths), 2)
+        self.assertEqual(scheduler.interval, 7200)
+        self.assertFalse(perform(self.player, "tick", scheduler))
+        self.assertEqual(len(self.desktop.paths), 2)
+
+    def test_failed_login_switch_keeps_current_wallpaper_and_history(self):
+        old = self.player.next()
+        self.player.state.update(running=True, change_on_login=True)
+        self.player.save()
+        before = self.vault.load_state()
+        self.desktop.fail_wallpaper = True
+        with self.assertRaises(PhotosError):
+            perform(self.player, "login", FakeScheduler())
+        self.assertEqual(self.vault.load_state(), before)
+        self.assertTrue(old.path.exists())
+        self.assertIs(self.player.current, old)
+
     def test_resume_switches_immediately_and_pause_does_not_switch(self):
         scheduler = FakeScheduler()
         self.player.state["images"] = {}
@@ -410,6 +442,31 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(self.player.state["after"], "2025-02-01")
         self.assertEqual(self.player.state["before"], "2025-02-28")
         self.assertIn("1 of 3 photos match", self.window.filter_counts.text())
+
+    def test_change_on_login_checkbox_is_saved_without_starting_rotation(self):
+        self.assertFalse(self.window.change_on_login.isChecked())
+        self.window.change_on_login.setChecked(True)
+        with patch.object(Vault, "mode", return_value="keyring"):
+            self.window.save_settings()
+            self.finish_job()
+        self.player.reload()
+        self.assertTrue(self.player.state["change_on_login"])
+        self.window.change_on_login.setChecked(False)
+        self.window._load_settings()
+        self.assertTrue(self.window.change_on_login.isChecked())
+        self.assertFalse(self.player.state.get("running", False))
+        self.assertEqual(self.player.desktop.paths, [])
+        self.window.change_on_login.setChecked(False)
+        self.window.save_settings()
+        self.finish_job()
+        self.assertFalse(self.player.vault.load_state()["change_on_login"])
+
+    def test_password_storage_cannot_enable_login_changes(self):
+        self.window.change_on_login.setChecked(True)
+        self.window.save_settings()
+        self.finish_job()
+        self.assertIn("account login needs system account protection", self.window.status.text())
+        self.assertFalse(self.player.vault.load_state().get("change_on_login", False))
 
     def test_filters_can_be_cleared_and_reject_reversed_range(self):
         self.window.after.setDate(QDate(2025, 3, 1))

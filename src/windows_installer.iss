@@ -35,7 +35,7 @@ Source: "{#BundleDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 
 [Icons]
 Name: "{userprograms}\Timeshow"; Filename: "{app}\Timeshow.exe"; Parameters: "--mode gui"; WorkingDir: "{app}"
-Name: "{userstartup}\Timeshow tray"; Filename: "{app}\Timeshow.exe"; Parameters: "--mode tray"; WorkingDir: "{app}"
+Name: "{userstartup}\Timeshow tray"; Filename: "{app}\Timeshow.exe"; Parameters: "--mode tray --login"; WorkingDir: "{app}"
 Name: "{userdesktop}\Timeshow"; Filename: "{app}\Timeshow.exe"; Parameters: "--mode gui"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]

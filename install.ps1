@@ -34,6 +34,7 @@ try {
     $startup = [Environment]::GetFolderPath('Startup')
     $trayShortcut = $shell.CreateShortcut((Join-Path $startup 'Timeshow tray.lnk'))
     $trayShortcut.TargetPath = Join-Path $projectDir '.venv\Scripts\timeshow-tray.exe'
+    $trayShortcut.Arguments = '--login'
     $trayShortcut.WorkingDirectory = $projectDir
     $trayShortcut.IconLocation = Join-Path $projectDir 'src\timeshow\assets\timeshow.ico'
     $trayShortcut.Save()

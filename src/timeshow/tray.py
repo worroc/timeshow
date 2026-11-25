@@ -2,13 +2,14 @@
 
 import sys
 
-from PySide6.QtCore import QLockFile, QProcess
+from PySide6.QtCore import QLockFile, QProcess, QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from .desktop import config_directory
 from ._version import APP_VERSION
 from .processes import command, spawn
+from .photos import PhotosError
 from .scheduling import public_settings
 from .storage import private_directory
 from .ui_icon import app_icon
@@ -32,6 +33,14 @@ class Tray:
         self.icon.setContextMenu(self.menu)
         self.icon.activated.connect(self.clicked)
         self.update_menu()
+
+    def _login(self) -> None:
+        try:
+            settings = public_settings()
+            if settings.get("running", False) and settings.get("change_on_login", False):
+                self.activate("login")
+        except PhotosError as error:
+            self.icon.showMessage("Timeshow", str(error))
 
     def update_menu(self) -> None:
         try:
@@ -82,6 +91,7 @@ class Tray:
 
 
 def main() -> int:
+    login = "--login" in sys.argv
     app = QApplication(sys.argv)
     app.setApplicationName("Timeshow tray")
     app.setApplicationVersion(APP_VERSION)
@@ -96,4 +106,6 @@ def main() -> int:
         return 0
     tray = Tray(app)
     tray.icon.show()
+    if login:
+        QTimer.singleShot(0, tray._login)
     return app.exec()

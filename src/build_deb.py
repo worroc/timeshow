@@ -44,7 +44,7 @@ StartupNotify=true
 AUTOSTART = """[Desktop Entry]
 Type=Application
 Name=Timeshow tray
-Exec=/usr/bin/timeshow-tray
+Exec=/usr/bin/timeshow-tray --login
 Icon=/usr/share/pixmaps/timeshow.png
 Terminal=false
 """
