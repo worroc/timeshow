@@ -1,5 +1,6 @@
 """Desktop behavior uses synthetic photos and never changes real wallpaper."""
 
+from copy import deepcopy
 from datetime import datetime, timezone
 from io import BytesIO
 import json
@@ -100,7 +101,143 @@ class PlayerTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def test_no_repeats_across_restart_and_exhaustion(self):
+    def local_photo(self, relative: str, captured: str | None = None) -> Path:
+        path = self.root / "local photos" / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        exif = Image.Exif()
+        if captured:
+            exif[34665] = {36867: captured}
+        Image.new("RGB", (32, 24), (90, 130, 70)).save(path, exif=exif)
+        return path
+
+    def test_local_folders_mix_with_albums_and_keep_history_after_restart(self):
+        first = self.local_photo("first.jpg")
+        second = self.local_photo("nested/second.PNG")
+        originals = {path: path.read_bytes() for path in (first, second)}
+        self.player.add_folder("Local", first.parent)
+        self.assertEqual(self.player.refresh(), 5)
+        shown = {self.player.next().media_id for _ in range(5)}
+        self.assertEqual(len(shown), 5)
+        self.assertEqual(len(self.source.downloads), 3)
+        reopened = Player(Vault.open(self.vault.directory, PasswordProtector(PASSWORD)),
+                          self.desktop, self.root / "runtime", self.source)
+        self.assertEqual(reopened.refresh(), 5)
+        self.assertEqual(reopened.remaining(), 0)
+        self.assertNotEqual(reopened.next().media_id, self.player.current.media_id)
+        for path, body in originals.items():
+            self.assertEqual(path.read_bytes(), body)
+
+    def test_overlapping_folders_deduplicate_and_duplicate_folder_is_rejected(self):
+        photo = self.local_photo("nested/first.jpg")
+        self.player.add_folder("Parent", photo.parent.parent)
+        self.player.add_folder("Child", photo.parent)
+        with self.assertRaisesRegex(PhotosError, "already configured"):
+            self.player.add_folder("Again", photo.parent / ".")
+        self.player.add_album("Another album", ALBUM_URL + "-other")
+        self.assertEqual(self.player.refresh(), 4)
+        local = [item for item in self.player.state["images"].values() if item.get("source") == "folder"]
+        self.assertEqual(len(local), 1)
+        self.assertEqual(len(local[0]["album_ids"]), 2)
+        self.player.enable_album(self.player.state["albums"][1]["id"], False)
+        self.player.remove_album(self.player.state["albums"][2]["id"])
+        self.assertEqual(self.player.refresh(), 3)
+        self.assertTrue(photo.exists())
+
+    def test_local_capture_dates_and_paths_stay_private(self):
+        dated = self.local_photo("dated.jpg", "2025:02:15 12:00:00")
+        self.local_photo("undated.jpg")
+        self.local_photo("bad-date.jpg", "not a capture date")
+        self.player.add_folder("Local", dated.parent)
+        self.player.enable_album(self.player.state["albums"][0]["id"], False)
+        self.assertEqual(self.player.refresh(), 3)
+        self.player.configure(60, "fill", "2025-02-15", "2025-02-15", 1)
+        self.assertEqual(len(self.player.eligible()), 1)
+        self.assertEqual(self.player.next().body, dated.read_bytes())
+        self.player.open_current_album()
+        self.assertEqual(self.desktop.opened, [dated.parent])
+        for name in ("state.enc", "settings.json"):
+            self.assertNotIn(str(dated.parent).encode(), (self.vault.directory / name).read_bytes())
+
+    def test_bad_local_listing_never_publishes_a_partial_refresh(self):
+        photo = self.local_photo("first.jpg")
+        self.player.add_folder("Local", photo.parent)
+        self.player.refresh()
+        original = self.vault.load_state()
+        original_memory = deepcopy(self.player.state)
+        corrupt = photo.parent / "broken.jpg"
+        corrupt.write_bytes(b"synthetic corrupt photo")
+        with self.assertRaises(PhotosError) as caught:
+            self.player.refresh()
+        self.assertNotIn(str(photo.parent), str(caught.exception))
+        self.assertEqual(self.vault.load_state(), original)
+        self.assertEqual(self.player.state, original_memory)
+        corrupt.unlink()
+        photo.unlink()
+        photo.parent.rmdir()
+        with self.assertRaises(PhotosError):
+            self.player.refresh()
+        self.assertEqual(self.vault.load_state(), original)
+
+    def test_missing_local_file_keeps_wallpaper_and_originals_are_never_cleaned(self):
+        first = self.local_photo("first.jpg")
+        second = self.local_photo("second.jpg")
+        self.player.add_folder("Local", first.parent)
+        self.player.enable_album(self.player.state["albums"][0]["id"], False)
+        self.player.refresh()
+        keys = self.player.eligible()
+        self.player.state["show_order"] = keys
+        self.player.save()
+        old = self.player.next()
+        state = self.vault.load_state()
+        Path(self.player.state["images"][keys[1]]["url"]).unlink()
+        with self.assertRaises(PhotosError):
+            self.player.next()
+        self.assertTrue(old.path.exists())
+        self.assertEqual(self.vault.load_state(), state)
+        self.assertEqual(self.vault.get_image(old.media_id), old.body)
+        self.player.exclude_current()
+        self.assertTrue(Path(self.player.state["images"][old.media_id]["url"]).exists())
+        self.assertIsNone(self.vault.get_image(old.media_id))
+
+    def test_local_previous_reads_original_after_cache_cleanup(self):
+        first = self.local_photo("first.jpg")
+        self.local_photo("second.webp")
+        self.player.add_folder("Local", first.parent)
+        self.player.enable_album(self.player.state["albums"][0]["id"], False)
+        self.player.refresh()
+        old = self.player.next()
+        self.player.next()
+        self.assertIsNone(self.vault.get_image(old.media_id))
+        self.assertEqual(self.player.previous().media_id, old.media_id)
+        self.assertEqual(self.source.downloads, [])
+
+    def test_local_folder_ignores_nonphotos_and_does_not_follow_symlinks(self):
+        photo = self.local_photo("first.gif")
+        (photo.parent / "notes.txt").write_text("synthetic notes")
+        outside = self.root / "outside"
+        outside.mkdir()
+        (outside / "not-a-photo.jpg").write_bytes(b"synthetic corrupt photo")
+        try:
+            (photo.parent / "linked-directory").symlink_to(outside, target_is_directory=True)
+            (photo.parent / "linked.jpg").symlink_to(outside / "not-a-photo.jpg")
+        except OSError:
+            pass  # Windows may require extra privileges to create symlinks.
+        self.player.add_folder("Local", photo.parent)
+        self.assertEqual(self.player.refresh(), 4)
+
+    def test_unreadable_subfolder_fails_without_losing_listing(self):
+        photo = self.local_photo("first.jpg")
+        self.player.add_folder("Local", photo.parent)
+        self.player.refresh()
+        original = self.vault.load_state()
+        def denied(root, *, onerror, followlinks):
+            onerror(PermissionError("synthetic private folder details"))
+        with patch("timeshow._local.os.walk", side_effect=denied):
+            with self.assertRaises(PhotosError):
+                self.player.refresh()
+        self.assertEqual(self.vault.load_state(), original)
+
+    def test_no_repeats_across_restart_and_cycle_rollover(self):
         first = self.player.next().media_id
         reopened = Vault.open(self.root / "vault", PasswordProtector(PASSWORD))
         player = Player(reopened, self.desktop, self.root / "runtime", self.source)
@@ -108,8 +245,7 @@ class PlayerTests(unittest.TestCase):
         second = player.next().media_id
         third = player.next().media_id
         self.assertEqual(len({first, second, third}), 3)
-        with self.assertRaises(CollectionExhausted):
-            player.next()
+        self.assertNotEqual(player.next().media_id, third)
 
     def test_previous_then_forward_does_not_consume_new_photo(self):
         first = self.player.next().media_id
@@ -120,12 +256,12 @@ class PlayerTests(unittest.TestCase):
         self.assertEqual(self.player.remaining(), 1)
         self.assertEqual(len(self.source.downloads), downloads + 2)
 
-    def test_wallpaper_failure_does_not_mark_seen(self):
+    def test_wallpaper_failure_does_not_advance_cursor(self):
         self.desktop.fail_wallpaper = True
         with self.assertRaises(PhotosError):
             self.player.next()
-        self.assertEqual(self.player.state["seen"], [])
-        self.assertEqual(self.vault.load_state()["seen"], [])
+        self.assertEqual(self.player.state["cursor"], -1)
+        self.assertEqual(self.vault.load_state()["cursor"], -1)
         self.assertEqual(list((self.root / "runtime").glob("wallpaper-*")), [])
 
     def test_only_current_download_retained_without_losing_history(self):
@@ -133,9 +269,9 @@ class PlayerTests(unittest.TestCase):
         for _ in range(3):
             self.player.next()
         self.assertEqual(len(list((self.root / "vault/cache").glob("*.image"))), 1)
-        self.assertEqual(len(self.player.state["seen"]), 3)
-        with self.assertRaises(CollectionExhausted):
-            self.player.next()
+        self.assertEqual(self.player.state["cursor"], 2)
+        old = self.player.current.media_id
+        self.assertNotEqual(self.player.next().media_id, old)
 
     def test_settings_filter_and_disabled_album(self):
         self.player.configure(30, "fill", "2025-02-01", "2025-02-28", 20)
@@ -192,7 +328,7 @@ class PlayerTests(unittest.TestCase):
         self.assertIsNone(self.vault.get_image(old.media_id))
         self.assertTrue(current.path.exists())
         self.assertEqual(self.vault.get_image(current.media_id), current.body)
-        self.assertIn(old.media_id, self.vault.load_state()["seen"])
+        self.assertIn(old.media_id, self.vault.load_state()["show_order"])
 
     def test_failed_switch_keeps_old_image_and_history(self):
         old = self.player.next()
@@ -341,8 +477,31 @@ class PlayerTests(unittest.TestCase):
         result = subprocess.run([sys.executable, "-c", script], input=vault.session_key(),
                                 env=environment, capture_output=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stdout.decode())
-        self.assertEqual(len(vault.load_state()["seen"]), 1)
+        self.assertEqual(vault.load_state()["cursor"], 0)
         self.assertEqual(len(list((runtime_root / "timeshow").glob("wallpaper-*"))), 1)
+
+    def test_real_child_worker_reads_local_original_without_network(self):
+        photo = self.local_photo("first.jpg")
+        original = photo.read_bytes()
+        self.player.remove_album(self.player.state["albums"][0]["id"])
+        self.player.add_folder("Local", photo.parent)
+        self.player.refresh()
+        script = (
+            "from pathlib import Path; import sys; from timeshow import worker; "
+            "worker.config_directory = lambda: Path(sys.argv[1]); "
+            "worker.app_directory = lambda: Path(sys.argv[2]); "
+            "worker.runtime_directory = lambda: Path(sys.argv[3]); "
+            "worker.Desktop = type('FakeDesktop', (), {'set_wallpaper': lambda self, path: None}); "
+            "raise SystemExit(worker.main(['--action', 'next', '--session-key']))"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script, str(self.vault.directory), str(self.root / "data"),
+             str(self.root / "child-runtime")], input=self.vault.session_key(),
+            capture_output=True, timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout.decode())
+        self.assertEqual(self.vault.load_state()["cursor"], 0)
+        self.assertEqual(photo.read_bytes(), original)
 
 
 try:
@@ -426,7 +585,7 @@ class GuiTests(unittest.TestCase):
             sys.setswitchinterval(original_interval)
         self.assertIsNotNone(self.player.current)
         self.assertFalse(self.window._pixmap.isNull())
-        self.assertEqual(len(self.player.state["seen"]), 1)
+        self.assertEqual(self.player.state["cursor"], 0)
         self.assertTrue(self.window.web_button.isEnabled())
 
     def test_filters_tab_saves_date_range(self):
@@ -467,6 +626,15 @@ class GuiTests(unittest.TestCase):
         self.finish_job()
         self.assertIn("account login needs system account protection", self.window.status.text())
         self.assertFalse(self.player.vault.load_state().get("change_on_login", False))
+
+    def test_settings_have_no_history_limit(self):
+        self.assertFalse(hasattr(self.window, "history_limit"))
+        self.window.save_settings()
+        self.finish_job()
+        self.player.reload()
+        self.assertNotIn("history_limit", self.player.state)
+        settings = json.loads((self.player.vault.directory / "settings.json").read_text())
+        self.assertNotIn("history_limit", settings)
 
     def test_filters_can_be_cleared_and_reject_reversed_range(self):
         self.window.after.setDate(QDate(2025, 3, 1))
@@ -540,7 +708,7 @@ class GuiTests(unittest.TestCase):
         for _ in range(4):
             self.window.next_photo()
             self.finish_job()
-        self.assertIn("Every eligible photo", self.window.status.text())
+        self.assertIn("Photo displayed", self.window.status.text())
 
     def test_start_failure_shows_error_and_keeps_running(self):
         self.player.desktop.fail_wallpaper = True
@@ -550,9 +718,9 @@ class GuiTests(unittest.TestCase):
         self.assertTrue(self.window.running)
         self.assertIn("wallpaper failure", self.window.status.text())
 
-    def test_start_exhaustion_pauses_rotation(self):
-        self.player.state["seen"] = list(self.player.state["images"])
-        self.player.save()
+    def test_start_with_no_eligible_photos_pauses_rotation(self):
+        self.player.source.images = []
+        self.player.refresh()
         with patch.object(Vault, "mode", return_value="keyring"):
             self.window.toggle()
             self.finish_job()

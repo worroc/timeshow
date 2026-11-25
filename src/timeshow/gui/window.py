@@ -295,10 +295,10 @@ class Window(QMainWindow):
         privacy = QLabel("Links and history are encrypted. Settings and the current image are readable. A successful switch deletes the previous download and wallpaper file. The OS may keep its own copy.")
         privacy.setWordWrap(True)
         layout.addWidget(privacy)
-        note = QLabel("Photos do not repeat automatically, even after restarting. Previous revisits history. Rotation pauses when all eligible photos have appeared.")
+        note = QLabel("Photos follow a saved random order. Previous revisits earlier photos. Rotation continues in a new random order when the current cycle ends. Earlier entries remain available through Previous.")
         note.setWordWrap(True)
         layout.addWidget(note)
-        reset = QPushButton("Reset viewing history…")
+        reset = QPushButton("Restart rotation…")
         reset.clicked.connect(self.reset_history)
         history_row = QHBoxLayout()
         history_row.addWidget(reset)
@@ -333,7 +333,7 @@ class Window(QMainWindow):
             "From includes that date and all later dates. To includes that date and all earlier dates. Use the calendar to choose a date.",
             "Dates use year-month-day: 2024-03-15 means March 15, 2024.",
             "No limit allows any date on that side. Use Clear to remove a limit. Photos without a known capture date are skipped while a limit is set.",
-            "Filters apply to enabled albums. Previously shown and excluded photos stay out of automatic rotation.",
+            "Filters apply to enabled albums and folders. Excluded photos stay out of rotation.",
         ):
             note = QLabel(text)
             note.setWordWrap(True)
@@ -411,8 +411,8 @@ class Window(QMainWindow):
 
     def _counts(self) -> None:
         state = self.player.state
-        self.counts.setText(f"{len(self.player.eligible())} eligible · {self.player.remaining()} unseen\n"
-                            f"{len(state['seen'])} shown · {len(state['excluded'])} excluded")
+        self.counts.setText(f"{len(self.player.eligible())} eligible · {self.player.remaining()} ahead\n"
+                            f"{max(0, state['cursor'])} earlier entries · {len(state['excluded'])} excluded")
         enabled = {album["id"] for album in state["albums"] if album["enabled"]}
         excluded = set(state["excluded"])
         photos = [photo for key, photo in state["images"].items()
@@ -526,7 +526,7 @@ class Window(QMainWindow):
         if photo.capture_time_ms is not None:
             day = datetime.fromtimestamp(photo.capture_time_ms / 1000).strftime("%Y-%m-%d")
         self.info.setText(f"{photo.album or 'Photo'} · {photo.width} × {photo.height} · {day}")
-        self.status.setText(f"Photo displayed. {self.player.remaining()} unseen photos remain.")
+        self.status.setText(f"Photo displayed. {self.player.remaining()} photos ahead in this rotation.")
 
     def _resize_preview(self) -> None:
         if not self._pixmap.isNull():
@@ -663,9 +663,9 @@ class Window(QMainWindow):
         self._submit("Excluding this photo and selecting another…", operation, self._display)
 
     def reset_history(self) -> None:
-        answer = QMessageBox.question(self, "Reset history", "Allow previously shown photos to appear again?")
+        answer = QMessageBox.question(self, "Restart rotation", "Shuffle upcoming photos while keeping the current image and all earlier entries?")
         if answer == QMessageBox.StandardButton.Yes:
-            self._submit("Resetting history…", self.player.reset_history)
+            self._submit("Restarting rotation…", self.player.reset_history)
 
     def restore_excluded(self) -> None:
         answer = QMessageBox.question(self, "Restore photos", "Allow excluded photos back into the rotation?")

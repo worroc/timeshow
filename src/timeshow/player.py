@@ -12,6 +12,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 from .desktop import Desktop
 from ._local import _LocalPhotos
+from ._rotation import _migrate_order, _next_cycle, _reconcile_order
 from .http import validate_url
 from .photos import ImageCandidate, PhotosClient, PhotosError
 from .security import Vault
@@ -19,7 +20,7 @@ from .storage import private_directory, write_private
 
 
 class CollectionExhausted(PhotosError):
-    """All eligible photos have already appeared; rotation must pause."""
+    """There are no eligible photos to display."""
 
 
 @dataclass(frozen=True)
@@ -42,29 +43,34 @@ class Player:
         self.source = source if source is not None else PhotosClient()
         self._local_source = _LocalPhotos()
         self.state = vault.load_state()
+        _migrate_order(self.state, set(self.eligible()))
         self.current: DisplayedPhoto | None = None
         self.screen_size = (1920, 1080)
         private_directory(runtime)
 
     def save(self) -> None:
+        self.state["show_order"], self.state["cursor"] = _reconcile_order(self.state, set(self.eligible()))
         self.vault.save_state(self.state)
 
     def reload(self) -> None:
         self.state = self.vault.load_state()
+        _migrate_order(self.state, set(self.eligible()))
 
     def restore_current(self) -> DisplayedPhoto | None:
         entry = self.state.get("current")
         self.current = None
-        if not entry or entry["media_id"] not in self.state["images"]:
+        if not entry:
             return None
         key = entry["media_id"]
         body = self.vault.get_image(key)
         if body is None:
             return None
-        item = self.state["images"][key]
+        item = self.state["images"].get(key, entry.get("photo"))
+        if item is None:
+            return None
         labels = [a["label"] for a in self.state["albums"] if a["id"] in item["album_ids"]]
         self.current = DisplayedPhoto(key, body, Path(entry["path"]), item["width"], item["height"],
-                                      item["capture_time_ms"], ", ".join(labels))
+                                      item["capture_time_ms"], ", ".join(labels) or entry.get("album", ""))
         return self.current
 
     def add_album(self, label: str, url: str) -> None:
@@ -104,12 +110,16 @@ class Player:
         # Build a complete replacement before saving, so failure never publishes
         # a partial listing or discards an earlier successful album listing.
         updated = deepcopy(self.state)
+        current = updated.get("current")
+        if current and current["media_id"] in updated["images"]:
+            current["photo"] = deepcopy(updated["images"][current["media_id"]])
+            current["album"] = ", ".join(album["label"] for album in updated["albums"]
+                                          if album["id"] in current["photo"]["album_ids"])
         enabled = [album for album in updated["albums"] if album["enabled"]]
         if not enabled:
             raise PhotosError("Add and enable at least one album or folder first.")
+        updated["images"] = {}
         for album in enabled:
-            for record in updated["images"].values():
-                record["album_ids"] = [key for key in record["album_ids"] if key != album["id"]]
             local = album.get("kind") == "folder"
             images = (self._local_source.list_images(album["path"]) if local
                       else self.source.list_images(album["url"]))
@@ -118,17 +128,24 @@ class Player:
                 memberships = set(previous.get("album_ids", [])) | {album["id"]}
                 updated["images"][image.media_id] = {**asdict(image), "album_ids": sorted(memberships),
                                                       "source": "folder" if local else "google"}
+        updated["show_order"], updated["cursor"] = _reconcile_order(
+            updated, set(self._eligible(updated)), reshuffle=True,
+        )
         self.vault.save_state(updated)
         self.state = updated
         return len(self.eligible())
 
     def eligible(self) -> list[str]:
-        enabled = {album["id"] for album in self.state["albums"] if album["enabled"]}
-        excluded = set(self.state["excluded"])
-        after = self.state.get("after", "")
-        before = self.state.get("before", "")
+        return self._eligible(self.state)
+
+    @staticmethod
+    def _eligible(state: dict) -> list[str]:
+        enabled = {album["id"] for album in state["albums"] if album["enabled"]}
+        excluded = set(state["excluded"])
+        after = state.get("after", "")
+        before = state.get("before", "")
         result = []
-        for key, image in self.state["images"].items():
+        for key, image in state["images"].items():
             if key in excluded or not enabled.intersection(image["album_ids"]):
                 continue
             timestamp = image["capture_time_ms"]
@@ -142,7 +159,10 @@ class Player:
         return result
 
     def remaining(self) -> int:
-        return len(set(self.eligible()) - set(self.state["seen"]))
+        eligible = set(self.eligible())
+        order = self.state["show_order"]
+        ahead = sum(key in eligible for key in order[self.state["cursor"] + 1:])
+        return ahead + len(eligible - set(order))
 
     def configure(self, interval: int, fit: str, after: str, before: str, cache_limit: int) -> None:
         if interval < 10 or fit not in {"fill", "fit"} or not 1 <= cache_limit <= 500:
@@ -160,24 +180,31 @@ class Player:
         self.save()
 
     def next(self) -> DisplayedPhoto:
-        history = self.state["history"]
-        cursor = self.state["cursor"]
-        excluded = set(self.state["excluded"])
-        for index in range(cursor + 1, len(history)):
-            if history[index] not in excluded:
-                return self._show(history[index], cursor=index)
-        unseen = list(set(self.eligible()) - set(self.state["seen"]))
-        if not unseen:
-            raise CollectionExhausted("Every eligible photo has been shown. Add photos or reset history to start again.")
-        return self._show(secrets.choice(unseen))
+        eligible = set(self.eligible())
+        if not eligible:
+            raise CollectionExhausted("No eligible photos are available. Check sources and filters, then refresh the photo list.")
+        order, cursor = _reconcile_order(self.state, eligible)
+        if len(eligible) == 1:
+            index = max(0, cursor)
+            return self._show(order[index], index, order)
+        last_shown = self.state.get("current", {}).get("media_id")
+        index = cursor + 1
+        while index < len(order) and order[index] == last_shown:
+            index += 1
+        if index == len(order):
+            order, cursor = _next_cycle(order, eligible, last_shown)
+            index = cursor + 1
+        return self._show(order[index], index, order)
 
     def previous(self) -> DisplayedPhoto:
-        excluded = set(self.state["excluded"])
-        for index in range(self.state["cursor"] - 1, -1, -1):
-            key = self.state["history"][index]
-            if key not in excluded:
-                return self._show(key, cursor=index)
-        raise PhotosError("There is no previous photo.")
+        order, cursor = _reconcile_order(self.state, set(self.eligible()))
+        current_id = self.state.get("current", {}).get("media_id")
+        index = cursor - 1
+        if cursor >= 0 and current_id is not None and order[cursor] != current_id:
+            index = cursor
+        if index < 0:
+            raise PhotosError("There is no previous photo.")
+        return self._show(order[index], index, order)
 
     def _candidate(self, media_id: str) -> ImageCandidate:
         item = self.state["images"][media_id]
@@ -209,7 +236,7 @@ class Player:
         except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
             raise PhotosError("The image could not be decoded for wallpaper display.") from None
 
-    def _show(self, media_id: str, cursor: int | None = None) -> DisplayedPhoto:
+    def _show(self, media_id: str, cursor: int, order: list[str]) -> DisplayedPhoto:
         body = self._body(media_id)
         path = self.runtime / f"wallpaper-{secrets.token_hex(8)}.jpg"
         write_private(path, self._wallpaper(body))
@@ -225,12 +252,10 @@ class Player:
         try:
             # Store the new original only after the desktop accepts the switch.
             self.vault.put_image(media_id, body)
-            if cursor is None:
-                self.state["history"].append(media_id)
-                cursor = len(self.state["history"]) - 1
+            self.state["show_order"] = order
             self.state["cursor"] = cursor
-            self.state["seen"] = sorted(set(self.state["seen"]) | {media_id})
-            self.state["current"] = {"media_id": media_id, "path": str(path)}
+            self.state["current"] = {"media_id": media_id, "path": str(path),
+                                      "photo": deepcopy(item), "album": self.current.album}
             self.state["last_switch"] = time.time()
             self.save()
         finally:
@@ -259,7 +284,10 @@ class Player:
         self.vault.delete_image(self.current.media_id)
 
     def reset_history(self) -> None:
-        self.state.update(seen=[], history=[], cursor=-1)
+        order, cursor = _reconcile_order(self.state, set(self.eligible()))
+        self.state["show_order"], self.state["cursor"] = _next_cycle(
+            order[:cursor + 1], set(self.eligible()), self.state.get("current", {}).get("media_id"),
+        )
         self.save()
 
     def clear_exclusions(self) -> None:
@@ -269,7 +297,9 @@ class Player:
     def open_current_album(self) -> None:
         if not self.current:
             raise PhotosError("No photo is currently displayed.")
-        image = self.state["images"][self.current.media_id]
+        image = self.state["images"].get(self.current.media_id, self.state.get("current", {}).get("photo"))
+        if image is None:
+            raise PhotosError("The photo source is no longer configured.")
         for album in self.state["albums"]:
             if album["id"] in image["album_ids"]:
                 if album.get("kind") == "folder":

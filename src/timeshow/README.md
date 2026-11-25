@@ -16,7 +16,12 @@ random photo. It needs no Google account credentials or API keys.
   or removes private data. The installer removes its own files after cleanup.
 - `app.py` coordinates listing, random selection, and exactly one download.
 - `cli.py` reads local configuration, runs the app, and prints non-private status.
-- `player.py` manages GUI rotation, date filters, current-image retention, and no-repeat history.
+- `player.py` manages GUI rotation, date filters, and current-image retention.
+- `_rotation.py` builds a saved shuffled display order and cursor, replaces the
+  old seen/history lists, preserves the valid prefix on refresh, and appends new
+  shuffled cycles to the same list. Previous follows earlier entries without a
+  depth limit. A cycle never starts with the last shown image unless only one
+  eligible image exists.
 - `_local.py` reads local photo folders and subfolders into the existing candidate
   records. It uses Pillow for dimensions and EXIF capture dates. File identities
   use a hash of the full path. Listing fails if an image or directory is unreadable.

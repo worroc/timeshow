@@ -23,13 +23,13 @@ class WindowsIntegrationTests(unittest.TestCase):
             root = Path(temporary)
             vault = _initialize_storage(root / "config", root / "cache")
             state = vault.load_state()
-            state["seen"] = ["synthetic-shown-image"]
+            state["show_order"] = ["synthetic-shown-image"]
             vault.save_state(state)
             script = (
                 "from pathlib import Path; import sys; "
                 "from timeshow.worker import open_vault; "
                 "vault = open_vault(Path(sys.argv[1]), Path(sys.argv[2])); "
-                "assert vault.load_state()['seen'] == ['synthetic-shown-image']"
+                "assert vault.load_state()['show_order'] == ['synthetic-shown-image']"
             )
             result = subprocess.run(
                 [sys.executable, "-c", script, str(root / "config"), str(root / "cache")],

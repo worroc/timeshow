@@ -93,13 +93,13 @@ class LinuxIntegrationTests(unittest.TestCase):
                     self._wait_for_unlocked_keyring(daemon)
                     vault = _initialize_storage(root / "vault", root / "cache")
                     state = vault.load_state()
-                    state["seen"] = ["synthetic-shown-image"]
+                    state["show_order"] = ["synthetic-shown-image"]
                     vault.save_state(state)
                     script = (
                         "from pathlib import Path; import sys; "
                         "from timeshow.worker import open_vault; "
                         "vault = open_vault(Path(sys.argv[1]), Path(sys.argv[2])); "
-                        "assert vault.load_state()['seen'] == ['synthetic-shown-image']"
+                        "assert vault.load_state()['show_order'] == ['synthetic-shown-image']"
                     )
                     result = subprocess.run(
                         [sys.executable, "-c", script, str(root / "vault"), str(root / "cache")],

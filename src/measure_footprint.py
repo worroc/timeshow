@@ -79,8 +79,7 @@ def fixture(directory: Path) -> None:
                                  "album_ids": ["synthetic-album"]}
     vault.put_image("synthetic-0", (directory / "synthetic.jpg").read_bytes())
     state["current"] = {"media_id": "synthetic-0", "path": str(directory / "synthetic.jpg")}
-    state["history"] = ["synthetic-0"]
-    state["seen"] = ["synthetic-0"]
+    state["show_order"] = list(state["images"])
     state["cursor"] = 0
     vault.save_state(state)
 

@@ -61,8 +61,8 @@ class Vault:
     def load_state(self) -> dict:
         path = self.directory / "state.enc"
         if not path.exists():
-            return {"version": 1, "albums": [], "images": {}, "seen": [], "excluded": [],
-                    "history": [], "cursor": -1, "interval": 300, "fit": "fill",
+            return {"version": 1, "albums": [], "images": {}, "excluded": [],
+                    "show_order": [], "cursor": -1, "interval": 300, "fit": "fill",
                     **public_settings(self.directory)}
         with self._lock:
             try:

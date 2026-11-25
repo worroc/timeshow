@@ -39,7 +39,8 @@ class BundleIntegrationTests(unittest.TestCase):
     def test_paused_worker_reads_the_key_and_exits(self):
         result = self.run_worker(self.vault.session_key())
         self.assertEqual(result.returncode, 0, result.stdout.decode(errors="replace"))
-        self.assertEqual(self.vault.load_state()["seen"], [])
+        self.assertEqual(self.vault.load_state()["show_order"], [])
+        self.assertEqual(self.vault.load_state()["cursor"], -1)
 
     def test_wrong_key_reports_an_error_through_the_output_pipe(self):
         result = self.run_worker(Fernet.generate_key())

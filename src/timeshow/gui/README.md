@@ -19,10 +19,19 @@ manager. Local originals remain unchanged when copies are cleaned up or excluded
 Filters has optional From and To calendar pickers, Clear buttons, explanations,
 and a count of matching photos. Bounds include both days in the local time zone;
 this replaces UTC date matching. Undated photos are skipped only while a limit
-is set. Settings has Open Config beside Reset viewing history. It opens the
+is set. Settings has Open Config beside Restart rotation. It opens the
 config folder without exporting or decrypting data. Start switches immediately
 before the schedule continues. A failed switch leaves the schedule enabled for
-retry; exhausting the available photos pauses rotation.
+retry; having no eligible photos pauses rotation.
+
+Next and Previous move one cursor through a saved display order. At its end,
+rotation appends a new shuffled cycle after all earlier entries. Previous can
+visit entries across cycles without a depth limit. There is no separate history
+list or limit setting. With one image, switching does not grow the list. The
+first image of a new cycle differs from the last shown whenever another image
+is available. Refresh preserves the surviving prefix through the cursor and reshuffles the
+tail. A removed current image keeps its cached preview and wallpaper until a
+successful switch. Old seen/history state is migrated without changing the key.
 
 Settings has an optional Change on startup checkbox, off by default. It changes
 the photo at account login only while rotation is running. Pause stops both

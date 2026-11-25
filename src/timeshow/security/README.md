@@ -1,6 +1,6 @@
 # Encrypted application storage
 
-`Vault` encrypts album URLs, image metadata, and viewing history
+`Vault` encrypts album URLs, local folder paths, image metadata, display order, and cursor
 with Fernet authenticated encryption from the cryptography library. A random
 vault key is protected separately by one chosen `KeyProtector`:
 

@@ -135,12 +135,8 @@ Clear a date for no limit. Photos without a capture date are skipped while a lim
 is set. The match count uses saved filters and enabled sources, excluding removed
 photos. Capture dates and photo information now use your local time zone instead
 of UTC. Photos near midnight may therefore match a different day than before.
-In Settings, **Open Config** opens your config folder beside **Reset viewing history**.
+In Settings, **Open Config** opens your config folder beside **Restart rotation**.
 
-Next chooses an unseen image. History survives restarts and image deletion.
-Previous explicitly revisits history; Next moves forward through it before choosing
-another unseen image. When every eligible image has appeared, rotation pauses.
-Use Reset viewing history only when you want to allow repeats.
 Local folders include subfolders and support JPEG, PNG, WebP, and GIF images.
 Symbolic links and other file types are skipped. Capture dates come from EXIF
 DateTimeOriginal; photos without that date remain undated. Dates without a time
@@ -155,6 +151,23 @@ the same path. Renaming or moving a file makes it a new photo for history.
 Original files are never changed or deleted. Cleanup and exclusion affect only
 Timeshow's cached and rendered copies.
 
+Photos follow one saved, shuffled display order. Next and Previous move a cursor
+through that order without choosing a new random image at every switch. The order
+and cursor survive restarts; separate seen and history lists are no longer stored.
+At the end, rotation appends a new shuffled cycle to the same list and continues
+after the current entry. Previous can visit all earlier entries, including earlier
+cycles; returning forward follows the same saved order. There is no separate
+history list or history-limit setting. The saved list grows as cycles are added.
+A single image can repeat without adding entries; otherwise the next image is
+different from the last shown image.
+
+Refresh preserves surviving entries through the current image and shuffles the
+remaining eligible images, including new arrivals. Removed and excluded images
+cannot return through the saved upcoming list. If the current image disappears,
+its cached wallpaper stays until the next successful switch. Restart rotation
+keeps all entries through the current position and appends a new shuffled cycle.
+Rotation pauses only
+when no eligible photos remain. Old saved seen/history data is migrated when used.
 
 After a successful switch, the previous download and rendered wallpaper file are
 deleted directly, without using the trash. Only the current image is retained.

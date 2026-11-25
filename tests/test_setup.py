@@ -32,12 +32,13 @@ class SetupTests(unittest.TestCase):
                     vault = _initialize_storage(directory, self.cache / platform)
                     self.assertEqual(Vault.mode(directory), protector.mode)
                     state = vault.load_state()
-                    state["seen"] = ["synthetic-image"]
+                    state["show_order"] = ["synthetic-image"]
+                    state["cursor"] = 0
                     vault.save_state(state)
                     key_before = (directory / "key.json").read_bytes()
                     self.assertIsNone(_initialize_storage(directory, self.cache / platform))
                     reopened = open_vault(directory, self.cache / platform)
-                    self.assertEqual(reopened.load_state()["seen"], ["synthetic-image"])
+                    self.assertEqual(reopened.load_state()["show_order"], ["synthetic-image"])
                     self.assertEqual((directory / "key.json").read_bytes(), key_before)
                     protect.assert_called_once()
 
