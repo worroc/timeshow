@@ -11,6 +11,7 @@ import time
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from .desktop import Desktop
+from ._local import _LocalPhotos
 from .http import validate_url
 from .photos import ImageCandidate, PhotosClient, PhotosError
 from .security import Vault
@@ -39,6 +40,7 @@ class Player:
         self.desktop = desktop
         self.runtime = runtime
         self.source = source if source is not None else PhotosClient()
+        self._local_source = _LocalPhotos()
         self.state = vault.load_state()
         self.current: DisplayedPhoto | None = None
         self.screen_size = (1920, 1080)
@@ -67,10 +69,23 @@ class Player:
 
     def add_album(self, label: str, url: str) -> None:
         validate_url(url, album=True)
-        if any(album["url"] == url for album in self.state["albums"]):
+        if any(album.get("url") == url for album in self.state["albums"]):
             raise PhotosError("That album is already configured.")
         self.state["albums"].append({"id": secrets.token_hex(8), "label": label.strip() or "Album",
                                      "url": url, "enabled": True})
+        self.save()
+
+    def add_folder(self, label: str, path: Path) -> None:
+        try:
+            directory = Path(path).expanduser().resolve(strict=True)
+            if not directory.is_dir():
+                raise OSError
+        except (OSError, ValueError, RuntimeError):
+            raise PhotosError("Choose an existing, readable photo folder.") from None
+        if any(album.get("path") == str(directory) for album in self.state["albums"]):
+            raise PhotosError("That folder is already configured.")
+        self.state["albums"].append({"id": secrets.token_hex(8), "label": label.strip() or directory.name,
+                                     "kind": "folder", "path": str(directory), "enabled": True})
         self.save()
 
     def remove_album(self, album_id: str) -> None:
@@ -91,15 +106,18 @@ class Player:
         updated = deepcopy(self.state)
         enabled = [album for album in updated["albums"] if album["enabled"]]
         if not enabled:
-            raise PhotosError("Add and enable at least one album first.")
+            raise PhotosError("Add and enable at least one album or folder first.")
         for album in enabled:
-            images = self.source.list_images(album["url"])
             for record in updated["images"].values():
                 record["album_ids"] = [key for key in record["album_ids"] if key != album["id"]]
+            local = album.get("kind") == "folder"
+            images = (self._local_source.list_images(album["path"]) if local
+                      else self.source.list_images(album["url"]))
             for image in images:
                 previous = updated["images"].get(image.media_id, {})
                 memberships = set(previous.get("album_ids", [])) | {album["id"]}
-                updated["images"][image.media_id] = {**asdict(image), "album_ids": sorted(memberships)}
+                updated["images"][image.media_id] = {**asdict(image), "album_ids": sorted(memberships),
+                                                      "source": "folder" if local else "google"}
         self.vault.save_state(updated)
         self.state = updated
         return len(self.eligible())
@@ -169,7 +187,9 @@ class Player:
     def _body(self, media_id: str) -> bytes:
         body = self.vault.get_image(media_id)
         if body is None:
-            body = self.source.pull_image(self._candidate(media_id)).body
+            source = (self._local_source if self.state["images"][media_id].get("source") == "folder"
+                      else self.source)
+            body = source.pull_image(self._candidate(media_id)).body
         return body
 
     def _wallpaper(self, body: bytes) -> bytes:
@@ -252,9 +272,12 @@ class Player:
         image = self.state["images"][self.current.media_id]
         for album in self.state["albums"]:
             if album["id"] in image["album_ids"]:
-                self.desktop.open_album(album["url"])
+                if album.get("kind") == "folder":
+                    self.desktop.open_folder(Path(album["path"]))
+                else:
+                    self.desktop.open_album(album["url"])
                 return
-        raise PhotosError("The source album is no longer configured.")
+        raise PhotosError("The photo source is no longer configured.")
 
     def export_current(self, path: Path) -> None:
         if not self.current:

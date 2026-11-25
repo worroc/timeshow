@@ -1,7 +1,7 @@
 # Timeshow
 
 A personal wallpaper changer for Windows and Linux. Add Google Photos shared
-album links, select which albums to use, and rotate photos randomly at an interval.
+album links or local photo folders, select which sources to use, and rotate photos randomly at an interval.
 The project is MIT licensed and provided **as is**, without warranty.
 The window title, **Help → About Timeshow**, and tray tooltip show the app
 version. Close the app and quit its tray after upgrading, then reopen it to load
@@ -116,14 +116,15 @@ uv run --extra gui timeshow-gui
 ## Use
 
 1. Open Timeshow. Secure local storage is set up automatically for your account.
-2. Add one or more link-shared albums on the Albums tab. The link field is hidden.
-3. Press **Refresh photo list**. All pages must load before the new list is saved.
+2. On the Sources tab, use **Add album** for a shared link or **Add folder…** for
+   a local directory. Albums and folders can be used together. The link field is hidden.
+3. Press **Refresh photo list**. All albums and folders must load before the new list is saved.
 4. Set the interval and framing in Settings. Choose an optional date range in Filters.
 5. Press **Start** to change the wallpaper immediately and begin rotation, or **Next** for one change.
 
 The Filters tab has calendar pickers and explanations. Both end dates are included.
 Clear a date for no limit. Photos without a capture date are skipped while a limit
-is set. The match count uses saved filters and enabled albums, excluding removed
+is set. The match count uses saved filters and enabled sources, excluding removed
 photos. Capture dates and photo information now use your local time zone instead
 of UTC. Photos near midnight may therefore match a different day than before.
 In Settings, **Open Config** opens your config folder beside **Reset viewing history**.
@@ -132,20 +133,34 @@ Next chooses an unseen image. History survives restarts and image deletion.
 Previous explicitly revisits history; Next moves forward through it before choosing
 another unseen image. When every eligible image has appeared, rotation pauses.
 Use Reset viewing history only when you want to allow repeats.
+Local folders include subfolders and support JPEG, PNG, WebP, and GIF images.
+Symbolic links and other file types are skipped. Capture dates come from EXIF
+DateTimeOriginal; photos without that date remain undated. Dates without a time
+zone use the computer's local time zone. Refresh the photo list after adding or
+removing files. A missing folder, unreadable image, or failed directory scan
+reports an error instead of saving a partial list. Keep removable drives connected
+while rotating their photos.
+
+Folder paths and image identities are encrypted with the other private data.
+Local identities use the full file path, so overlapping folders do not repeat
+the same path. Renaming or moving a file makes it a new photo for history.
+Original files are never changed or deleted. Cleanup and exclusion affect only
+Timeshow's cached and rendered copies.
+
 
 After a successful switch, the previous download and rendered wallpaper file are
 deleted directly, without using the trash. Only the current image is retained.
-Previous downloads the earlier photo again. A failed switch keeps the old image.
+Previous downloads or reads the earlier photo again. A failed switch keeps the old image.
 Deletion does not guarantee forensic erasure on SSDs or remove OS-cached copies.
 Manually exported images and the separate CLI PoC outputs are not removed.
 
 Controls include image information, saving an unencrypted copy, showing the local
-wallpaper file, opening its source album in a browser, and excluding the current
+wallpaper file, opening its source album or local folder, and excluding the current
 photo. Exclusion removes the local download and prevents future rotation;
-it never deletes anything from Google Photos. Photo-specific browser links,
+it never deletes local originals or anything from Google Photos. Photo-specific browser links,
 location filters, and people filters are not available from this integration.
 
-The tray icon offers Next, Previous, Start/Pause, Open album in browser, Settings,
+The tray icon offers Next, Previous, Start/Pause, Open source, Settings,
 and Quit tray. The tray is a separate process. Closing the GUI exits it and frees
 its image buffers and vault key; the tray stays available. Quitting the tray does
 not cancel a schedule. Use Pause to stop scheduled switching.

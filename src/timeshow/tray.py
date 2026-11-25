@@ -22,7 +22,7 @@ class Tray:
         self.menu = QMenu()
         self.actions = {}
         for key, label in [("next", "Next"), ("previous", "Previous"), ("toggle", "Start"),
-                           ("web", "Open album in browser"), ("settings", "Settings"),
+                           ("web", "Open source"), ("settings", "Settings"),
                            ("quit", "Quit tray")]:
             action = QAction(label, self.menu)
             action.triggered.connect(lambda checked=False, name=key: self.activate(name))

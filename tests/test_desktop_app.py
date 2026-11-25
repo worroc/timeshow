@@ -363,6 +363,26 @@ class GuiTests(unittest.TestCase):
         self.window.tray_actions["settings"].trigger()
         self.assertEqual(self.window.tabs.currentIndex(), 1)
 
+    def test_add_folder_through_picker_alongside_album(self):
+        folder = self.root / "local photos"
+        folder.mkdir()
+        photo = folder / "first.jpg"
+        photo.write_bytes(image_bytes())
+        button = next(button for button in self.window.findChildren(QPushButton)
+                      if button.text() == "Add folder…")
+        with patch("timeshow.gui.window.QFileDialog.getExistingDirectory", return_value=str(folder)):
+            button.click()
+        self.finish_job()
+        self.assertEqual(self.window.albums.count(), 2)
+        self.assertEqual(self.player.state["albums"][1]["path"], str(folder))
+        self.window.refresh_photos()
+        self.finish_job()
+        self.assertEqual(len(self.player.eligible()), 4)
+        with patch("timeshow.gui.window.QFileDialog.getExistingDirectory", return_value=""):
+            button.click()
+        self.assertFalse(self.window.busy)
+        self.assertEqual(self.window.albums.count(), 2)
+
     def test_background_playback_updates_preview(self):
         original_interval = sys.getswitchinterval()
         try:

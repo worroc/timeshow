@@ -192,7 +192,7 @@ class Window(QMainWindow):
         display = QWidget()
         pane = QVBoxLayout(display)
         pane.setContentsMargins(0, 0, 16, 0)
-        self.preview = QLabel("Add an album, refresh photos, then press Start.")
+        self.preview = QLabel("Add an album or folder, refresh photos, then press Start.")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview.setMinimumSize(160, 100)
         self.preview.setWordWrap(True)
@@ -208,7 +208,7 @@ class Window(QMainWindow):
         self.next_button = self._button("Next", self.next_photo, controls)
         pane.addLayout(controls)
         actions = QHBoxLayout()
-        self.web_button = self._button("Open album in browser", self.open_web, actions)
+        self.web_button = self._button("Open source", self.open_web, actions)
         self.export_button = self._button("Save image…", self.export, actions)
         self.locate_button = self._button("Show local file", self.reveal, actions)
         pane.addLayout(actions)
@@ -231,14 +231,14 @@ class Window(QMainWindow):
     def _album_tab(self) -> None:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        intro = QLabel("Choose which albums to include. Their links are stored securely on this computer.")
+        intro = QLabel("Choose albums and local folders to include. Links and folder paths are stored securely.")
         intro.setWordWrap(True)
         layout.addWidget(intro)
         self.albums = QListWidget()
         self.albums.itemChanged.connect(self.album_changed)
         layout.addWidget(self.albums, 1)
         self.album_name = QLineEdit()
-        self.album_name.setPlaceholderText("Album name")
+        self.album_name.setPlaceholderText("Album or folder name (optional)")
         self.album_url = QLineEdit()
         self.album_url.setPlaceholderText("Google Photos shared album link")
         self.album_url.setEchoMode(QLineEdit.EchoMode.Password)
@@ -246,6 +246,9 @@ class Window(QMainWindow):
         layout.addWidget(self.album_url)
         row = QHBoxLayout()
         self._button("Add album", self.add_album, row)
+        self._button("Add folder…", self.add_folder, row)
+        layout.addLayout(row)
+        row = QHBoxLayout()
         self._button("Remove selected", self.remove_album, row)
         layout.addLayout(row)
         refresh = QPushButton("Refresh photo list")
@@ -254,10 +257,11 @@ class Window(QMainWindow):
         self.counts = QLabel()
         self.counts.setWordWrap(True)
         layout.addWidget(self.counts)
-        note = QLabel("Anyone who obtains a shared link can access its album. Disable link sharing in Google Photos to revoke it.")
+        note = QLabel("Folders include subfolders. Original files stay untouched.\n"
+                      "Anyone who obtains a shared link can access its album. Disable link sharing in Google Photos to revoke it.")
         note.setWordWrap(True)
         layout.addWidget(note)
-        self._add_tab(panel, "Albums")
+        self._add_tab(panel, "Sources")
 
     def _add_tab(self, panel: QWidget, title: str) -> None:
         scroll = QScrollArea()
@@ -364,7 +368,7 @@ class Window(QMainWindow):
             ("next", "Next", self.next_photo),
             ("previous", "Previous", self.previous_photo),
             ("toggle", "Start", self.toggle),
-            ("web", "Open album in browser", self.open_web),
+            ("web", "Open source", self.open_web),
             ("settings", "Settings", self.show_settings),
             ("quit", "Quit", self.quit),
         ]:
@@ -393,6 +397,7 @@ class Window(QMainWindow):
         self.albums.clear()
         for album in self.player.state["albums"]:
             item = QListWidgetItem(album["label"])
+            item.setToolTip("Local folder" if album.get("kind") == "folder" else "Google Photos album")
             item.setData(Qt.ItemDataRole.UserRole, album["id"])
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(Qt.CheckState.Checked if album["enabled"] else Qt.CheckState.Unchecked)
@@ -411,7 +416,7 @@ class Window(QMainWindow):
         undated = sum(photo["capture_time_ms"] is None for photo in photos)
         self.filter_counts.setText(
             f"{len(self.player.eligible())} of {len(photos)} photos match ({undated} have no date). "
-            "Counts use saved filters and enabled albums, excluding removed photos."
+            "Counts use saved filters and enabled sources, excluding removed photos."
         )
 
     def _update_controls(self) -> None:
@@ -583,7 +588,18 @@ class Window(QMainWindow):
         item = self.albums.currentItem()
         if item:
             key = item.data(Qt.ItemDataRole.UserRole)
-            self._submit("Removing album…", lambda: self.player.remove_album(key), lambda _: self.refresh_albums())
+            self._submit("Removing source…", lambda: self.player.remove_album(key), lambda _: self.refresh_albums())
+
+    def add_folder(self) -> None:
+        directory = QFileDialog.getExistingDirectory(self, "Choose a photo folder")
+        if not directory:
+            return
+        label = self.album_name.text()
+        def saved(_):
+            self.album_name.clear()
+            self.refresh_albums()
+            self.status.setText("Folder added. Refresh the photo list to load it.")
+        self._submit("Saving folder…", lambda: self.player.add_folder(label, Path(directory)), saved)
 
     def album_changed(self, item: QListWidgetItem) -> None:
         key = item.data(Qt.ItemDataRole.UserRole)
@@ -591,7 +607,7 @@ class Window(QMainWindow):
         self._submit("Saving album selection…", lambda: self.player.enable_album(key, enabled), lambda _: self.refresh_albums())
 
     def refresh_photos(self) -> None:
-        self._submit("Reading complete album lists…", self.player.refresh,
+        self._submit("Reading complete photo lists…", self.player.refresh,
                      lambda count: self.status.setText(f"Photo list updated: {count} eligible images."))
 
     def save_settings(self) -> None:
@@ -616,7 +632,7 @@ class Window(QMainWindow):
         self._submit("Opening the config folder…", open_folder)
 
     def open_web(self) -> None:
-        self._submit("Opening the source album…", self.player.open_current_album)
+        self._submit("Opening the photo source…", self.player.open_current_album)
 
     def reveal(self) -> None:
         if self.player.current:

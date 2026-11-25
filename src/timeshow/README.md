@@ -17,6 +17,11 @@ random photo. It needs no Google account credentials or API keys.
 - `app.py` coordinates listing, random selection, and exactly one download.
 - `cli.py` reads local configuration, runs the app, and prints non-private status.
 - `player.py` manages GUI rotation, date filters, current-image retention, and no-repeat history.
+- `_local.py` reads local photo folders and subfolders into the existing candidate
+  records. It uses Pillow for dimensions and EXIF capture dates. File identities
+  use a hash of the full path. Listing fails if an image or directory is unreadable.
+  It never modifies source files. `Player.add_folder(label, path)` adds a folder
+  to the same encrypted configuration, selection, and history as Google albums.
 - `settings.py` stores ordinary preferences as plaintext, excluding links and photo identities.
 - `security/` encrypts private GUI data and provides key-protection adapters.
 - `_setup.py` initializes secure storage during installation or first launch.
