@@ -22,6 +22,45 @@ class RecordingScheduler(Scheduler):
 
 
 class SchedulingTests(unittest.TestCase):
+    def test_frozen_linux_scheduler_restores_original_environment(self):
+        environment = {"LD_LIBRARY_PATH": "/synthetic/bundle", "LD_LIBRARY_PATH_ORIG": "/synthetic/system",
+                       "DBUS_SESSION_BUS_ADDRESS": "unix:path=/synthetic/bus", "DISPLAY": ":99"}
+        with patch("sys.platform", "linux"), patch("sys.frozen", True, create=True), patch.dict(
+            os.environ, environment, clear=True
+        ), patch("timeshow.scheduling.subprocess.run") as run:
+            Scheduler(Path("synthetic-config"))._run(["systemctl", "--version"])
+            child = run.call_args.kwargs["env"]
+            self.assertEqual(child["LD_LIBRARY_PATH"], "/synthetic/system")
+            self.assertEqual(child["DBUS_SESSION_BUS_ADDRESS"], environment["DBUS_SESSION_BUS_ADDRESS"])
+            self.assertEqual(child["DISPLAY"], ":99")
+            self.assertEqual(os.environ["LD_LIBRARY_PATH"], "/synthetic/bundle")
+
+    def test_frozen_linux_scheduler_handles_unset_or_empty_original_path(self):
+        for original in (None, ""):
+            environment = {"LD_LIBRARY_PATH": "/synthetic/bundle"}
+            if original is not None:
+                environment["LD_LIBRARY_PATH_ORIG"] = original
+            with self.subTest(original=original), patch("sys.platform", "linux"), patch(
+                "sys.frozen", True, create=True
+            ), patch.dict(os.environ, environment, clear=True), patch(
+                "timeshow.scheduling.subprocess.run"
+            ) as run:
+                Scheduler(Path("synthetic-config"))._run(["systemctl", "--version"])
+                child = run.call_args.kwargs["env"]
+                if original is None:
+                    self.assertNotIn("LD_LIBRARY_PATH", child)
+                else:
+                    self.assertEqual(child["LD_LIBRARY_PATH"], "")
+                self.assertEqual(os.environ["LD_LIBRARY_PATH"], "/synthetic/bundle")
+
+    def test_source_and_windows_scheduler_keep_inherited_environment(self):
+        for platform, frozen in [("linux", False), ("win32", True)]:
+            with self.subTest(platform=platform), patch("sys.platform", platform), patch(
+                "sys.frozen", frozen, create=True
+            ), patch("timeshow.scheduling.subprocess.run") as run:
+                Scheduler(Path("synthetic-config"))._run(["synthetic-scheduler"])
+                self.assertIsNone(run.call_args.kwargs["env"])
+
     def test_open_folder_opens_directory_itself_on_each_platform(self):
         folder = Path("synthetic-config").resolve()
         for platform, executable in [("linux", "xdg-open"), ("win32", "explorer.exe")]:

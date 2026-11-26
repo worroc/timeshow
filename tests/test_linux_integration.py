@@ -24,6 +24,24 @@ from timeshow.scheduling import Scheduler
 
 @unittest.skipUnless(sys.platform.startswith("linux"), "Requires Linux")
 class LinuxIntegrationTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("systemctl"), "Requires systemctl")
+    def test_frozen_scheduler_uses_system_libraries(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / "bundle"
+            bundle.mkdir(mode=0o700)
+            (bundle / "libc.so.6").write_bytes(b"Synthetic invalid shared library")
+            environment = dict(os.environ, LD_LIBRARY_PATH=str(bundle))
+            environment.pop("LD_LIBRARY_PATH_ORIG", None)
+            executable = shutil.which("systemctl")
+            broken = subprocess.run([executable, "--version"], env=environment,
+                                    capture_output=True, timeout=10)
+            self.assertNotEqual(broken.returncode, 0)
+            self.assertIn(b"libc.so.6", broken.stderr)
+            with patch.dict(os.environ, environment, clear=True), patch("sys.frozen", True, create=True):
+                Scheduler(root / "config")._run([executable, "--version"])
+                self.assertEqual(os.environ["LD_LIBRARY_PATH"], str(bundle))
+
     @unittest.skipUnless(shutil.which("gsettings"), "Requires gsettings and GNOME schemas")
     def test_gnome_wallpaper_settings_use_an_isolated_backend(self):
         with tempfile.TemporaryDirectory() as temporary:

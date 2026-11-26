@@ -23,8 +23,16 @@ class Scheduler:
         self.directory = directory if directory is not None else config_directory()
 
     def _run(self, arguments: list[str]) -> None:
+        environment = None
+        if sys.platform.startswith("linux") and getattr(sys, "frozen", False):
+            environment = os.environ.copy()
+            original = environment.get("LD_LIBRARY_PATH_ORIG")
+            if original is None:
+                environment.pop("LD_LIBRARY_PATH", None)
+            else:
+                environment["LD_LIBRARY_PATH"] = original
         try:
-            subprocess.run(arguments, capture_output=True, check=True, timeout=30)
+            subprocess.run(arguments, capture_output=True, check=True, timeout=30, env=environment)
         except (OSError, subprocess.SubprocessError):
             raise PhotosError("Could not configure the user scheduler. Check your logged-in desktop session and permissions.") from None
 
