@@ -9,19 +9,19 @@ the new version.
 
 ## Install on Ubuntu from a release
 
-The **0.1.1** release package is for **Ubuntu 26.04, amd64** (64-bit Intel or AMD).
+The **0.1.3** release package is built on **Ubuntu 22.04, amd64** (64-bit Intel or AMD).
 Python is included in the app bundle. Python and uv do not need to be installed.
-The package requires glibc 2.43. It does not support Ubuntu 22.04 or 24.04.
+The package requires glibc 2.35 or newer.
 
 1. Open [GitHub Releases](https://github.com/worroc/timeshow/releases/latest).
-2. Expand **Assets**. Download `timeshow_0.1.1_amd64.deb` and `SHA256SUMS`.
+2. Expand **Assets**. Download `timeshow_0.1.3_amd64.deb` and `SHA256SUMS`.
 3. If Timeshow is open, pause rotation, close its window, and choose **Quit tray**.
 4. Open a terminal in the download folder and run:
 
    ```sh
    cd ~/Downloads
    sha256sum --check SHA256SUMS
-   sudo apt install ./timeshow_0.1.1_amd64.deb
+   sudo apt install ./timeshow_0.1.3_amd64.deb
    ```
 
    The checksum should report **OK**. Stop if it reports a mismatch. `apt` installs
@@ -29,8 +29,8 @@ The package requires glibc 2.43. It does not support Ubuntu 22.04 or 24.04.
    administrator access; running Timeshow does not.
 
 5. Open **Timeshow** from the application menu, or run `timeshow` in a terminal.
-   The window title and **Help → About Timeshow** should show **0.1.1**.
-6. Add albums, refresh the photo list, then press **Start**.
+   The window title and **Help → About Timeshow** should show **0.1.3**.
+6. Add albums or local folders, refresh the photo list, then press **Start**.
 
 Download from **Releases → Assets** to install the app. The **Source code** archives
 contain the project sources, not an installable package. The **Actions** page also
@@ -58,12 +58,12 @@ release package. Existing user data is preserved.
 
 ## Install on Windows from a release
 
-The Windows test installer is **Timeshow-0.1.2-Setup.exe**, for 64-bit Windows 10
+The Windows installer is **Timeshow-0.1.3-Setup.exe**, for 64-bit Windows 10
 (version 1809 or newer) and Windows 11.
 
-1. Open [release v0.1.2](https://github.com/worroc/timeshow/releases/tag/v0.1.2).
-2. Under **Assets**, download `Timeshow-0.1.2-Setup.exe` and `SHA256SUMS-windows`.
-3. In PowerShell, run `Get-FileHash .\Timeshow-0.1.2-Setup.exe -Algorithm SHA256`
+1. Open [release v0.1.3](https://github.com/worroc/timeshow/releases/tag/v0.1.3).
+2. Under **Assets**, download `Timeshow-0.1.3-Setup.exe` and `SHA256SUMS-windows`.
+3. In PowerShell, run `Get-FileHash .\Timeshow-0.1.3-Setup.exe -Algorithm SHA256`
    in the download folder. Compare the hash with `SHA256SUMS-windows`.
 4. Close any older Timeshow window and choose **Quit tray**, then run the installer.
 5. Follow the wizard. A desktop shortcut is optional. Open **Timeshow** from Start.
@@ -72,7 +72,7 @@ Python is included, and uv is not needed on the target machine. The installer
 uses `%LOCALAPPDATA%\Programs\Timeshow` for the current user. Administrator access
 is not needed. Start-menu and tray login shortcuts are included. The app does not
 start wallpaper rotation until you press **Start**. The title and About dialog
-show **0.1.2**. The installer is not code-signed.
+show **0.1.3**. The installer is not code-signed.
 
 To upgrade, pause rotation, close the window and tray, and run the newer installer.
 To uninstall, use **Settings → Apps → Installed apps → Timeshow → Uninstall**.
@@ -304,7 +304,7 @@ Build on Debian or Ubuntu with `dpkg-deb` installed:
 uv run --extra gui --group build python src/build_deb.py
 ```
 
-This reuses the bundle builder and creates `dist/timeshow_0.1.2_amd64.deb`
+This reuses the bundle builder and creates `dist/timeshow_0.1.3_amd64.deb`
 on an amd64 machine. Both the package version and filename come from
 `pyproject.toml`; the architecture comes from the build machine. Build on each
 target architecture. To package a fresh bundle that was already built:
@@ -326,7 +326,7 @@ Building needs no administrator access. System-wide package installation and
 removal use the normal package manager and require administrator access:
 
 ```sh
-sudo apt install ./dist/timeshow_0.1.2_amd64.deb
+sudo apt install ./dist/timeshow_0.1.3_amd64.deb
 sudo apt remove timeshow
 # To also remove package-owned system configuration:
 sudo apt purge timeshow
@@ -353,7 +353,7 @@ uv run --extra gui --group build python src/build_windows_installer.py
 
 To reuse a fresh bundle, add `--bundle dist/Timeshow`. The builder reads the version
 from `pyproject.toml`, rejects bundles with a different version, and creates
-`dist/Timeshow-0.1.2-Setup.exe` plus `dist/SHA256SUMS-windows`. It packages only the
+`dist/Timeshow-0.1.3-Setup.exe` plus `dist/SHA256SUMS-windows`. It packages only the
 bundle and dependency notices. `src/windows_installer.iss` defines the per-user
 installation, shortcuts, and removal behavior. Inno Setup is used under its
 [license](https://github.com/jrsoftware/issrc/blob/main/license.txt).
