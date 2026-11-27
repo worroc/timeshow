@@ -43,6 +43,41 @@ class LinuxIntegrationTests(unittest.TestCase):
                 self.assertEqual(os.environ["LD_LIBRARY_PATH"], str(bundle))
 
     @unittest.skipUnless(shutil.which("gsettings"), "Requires gsettings and GNOME schemas")
+    def test_frozen_gnome_wallpaper_uses_system_libraries(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / "bundle"
+            bundle.mkdir(mode=0o700)
+            (bundle / "libc.so.6").write_bytes(b"Synthetic invalid shared library")
+            environment = dict(os.environ, XDG_CONFIG_HOME=str(root / "config"),
+                               GSETTINGS_BACKEND="keyfile", XDG_CURRENT_DESKTOP="GNOME")
+            environment.pop("LD_LIBRARY_PATH", None)
+            environment.pop("LD_LIBRARY_PATH_ORIG", None)
+            schemas = subprocess.run(["gsettings", "list-schemas"], env=environment,
+                                     capture_output=True, text=True, check=True, timeout=10)
+            if "org.gnome.desktop.background" not in schemas.stdout.splitlines():
+                self.skipTest("Install gsettings-desktop-schemas")
+            poisoned = dict(environment, LD_LIBRARY_PATH=str(bundle))
+            broken = subprocess.run(["gsettings", "list-keys", "org.gnome.desktop.background"],
+                                    env=poisoned, capture_output=True, timeout=10)
+            self.assertNotEqual(broken.returncode, 0)
+            self.assertIn(b"libc.so.6", broken.stderr)
+            image = root / "synthetic wallpaper.jpg"
+            image.write_bytes(b"Synthetic path; gsettings does not decode this file")
+            with patch.dict(os.environ, poisoned, clear=True), patch("sys.frozen", True, create=True):
+                Desktop().set_wallpaper(image)
+                self.assertEqual(os.environ["LD_LIBRARY_PATH"], str(bundle))
+            for key in ("picture-uri", "picture-uri-dark"):
+                result = subprocess.run(
+                    ["gsettings", "get", "org.gnome.desktop.background", key],
+                    env=environment, capture_output=True, text=True, timeout=10,
+                )
+                if key == "picture-uri-dark" and result.returncode:
+                    continue  # Older GNOME versions do not have this key.
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip().strip("'"), image.as_uri())
+
+    @unittest.skipUnless(shutil.which("gsettings"), "Requires gsettings and GNOME schemas")
     def test_gnome_wallpaper_settings_use_an_isolated_backend(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -20,7 +20,8 @@ Scheduling uses standard-user privileges through a systemd user timer or an
 interactive Windows scheduled task. It never requests root, SYSTEM, or an elevated
 run level. Desktop or TPM system dependencies may need separate administrator setup.
 
-Frozen Linux builds restore the original library search path for scheduler
-commands. Otherwise systemctl can load the bundle's older OpenSSL library and
-fail before accessing the user scheduler. Only the child command's environment
-is changed; the app and its workers keep their bundled libraries.
+Frozen Linux builds restore the original library search path for scheduler and
+desktop commands, including all GNOME GSettings calls. Otherwise systemctl can
+load the bundle's older OpenSSL library, or GSettings can fail to load the system
+settings backend and leave the wallpaper unchanged. Only the child command's
+environment is changed; the app and its workers keep their bundled libraries.

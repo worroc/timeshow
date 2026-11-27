@@ -33,9 +33,22 @@ def runtime_directory() -> Path:
     return path
 
 
+def _command_environment() -> dict[str, str] | None:
+    if not sys.platform.startswith("linux") or not getattr(sys, "frozen", False):
+        return None
+    environment = os.environ.copy()
+    original = environment.get("LD_LIBRARY_PATH_ORIG")
+    if original is None:
+        environment.pop("LD_LIBRARY_PATH", None)
+    else:
+        environment["LD_LIBRARY_PATH"] = original
+    return environment
+
+
 def run_command(arguments: list[str]) -> None:
     try:
-        subprocess.run(arguments, check=True, capture_output=True, timeout=20)
+        subprocess.run(arguments, check=True, capture_output=True, timeout=20,
+                       env=_command_environment())
     except (OSError, subprocess.SubprocessError):
         raise PhotosError("Desktop operation failed. Check the selected desktop and session.") from None
 
@@ -55,6 +68,7 @@ class Desktop:
             keys = subprocess.run(
                 ["gsettings", "list-keys", "org.gnome.desktop.background"],
                 capture_output=True, text=True, timeout=10, check=True,
+                env=_command_environment(),
             ).stdout.splitlines()
             if "picture-uri-dark" in keys:
                 run_command(["gsettings", "set", "org.gnome.desktop.background", "picture-uri-dark", path.as_uri()])

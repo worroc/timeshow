@@ -62,6 +62,11 @@ class BundleIntegrationTests(unittest.TestCase):
         self.assertEqual(updated["cursor"], 0)
         self.assertEqual(updated["current"]["media_id"], "synthetic-image")
         self.assertIn("--user restart timeshow.timer", trace.read_text().splitlines())
+        desktop_calls = (root / "desktop-calls").read_text().splitlines()
+        self.assertEqual(len(desktop_calls), 3)
+        self.assertTrue(desktop_calls[0].startswith("set org.gnome.desktop.background picture-uri "))
+        self.assertEqual(desktop_calls[1], "list-keys org.gnome.desktop.background")
+        self.assertTrue(desktop_calls[2].startswith("set org.gnome.desktop.background picture-uri-dark "))
 
     def _start_commands(self, root):
         self.environment["XDG_CONFIG_HOME"] = str(root / "config")
@@ -78,10 +83,17 @@ class BundleIntegrationTests(unittest.TestCase):
         )
         scheduler.chmod(0o700)
         desktop = commands / "gsettings"
-        desktop.write_text('#!/bin/sh\nif [ "$1" = "list-keys" ]; then printf "picture-uri\\n"; fi\nexit 0\n')
+        desktop.write_text(
+            '#!/bin/sh\n'
+            'if [ -n "${LD_LIBRARY_PATH-}" ]; then exit 98; fi\n'
+            'printf "%s\\n" "$*" >> "$TIMESHOW_TEST_DESKTOP_TRACE"\n'
+            'if [ "$1" = "list-keys" ]; then printf "picture-uri\\npicture-uri-dark\\n"; fi\n'
+            'exit 0\n'
+        )
         desktop.chmod(0o700)
         trace = root / "scheduler-calls"
         self.environment["TIMESHOW_TEST_SCHEDULER_TRACE"] = str(trace)
+        self.environment["TIMESHOW_TEST_DESKTOP_TRACE"] = str(root / "desktop-calls")
         self.environment["PATH"] = str(commands) + os.pathsep + os.environ["PATH"]
         return trace
 
