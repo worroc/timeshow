@@ -21,7 +21,7 @@ try:
 except ModuleNotFoundError:
     raise unittest.SkipTest("Install the gui extra to test encrypted desktop playback.")
 
-from timeshow.photos import DownloadedImage, ImageCandidate, PhotosError
+from timeshow.photos import DownloadedImage, HttpStatusError, ImageCandidate, PhotosError
 from timeshow.worker import perform
 
 ALBUM_URL = "https://photos.google.com/share/synthetic?key=synthetic"
@@ -43,6 +43,7 @@ class PhotoSource:
                        for number in [1, 2, 3]]
         self.downloads = []
         self.fail_listing = False
+        self.http_status = {}
 
     def list_images(self, url):
         if self.fail_listing:
@@ -51,6 +52,8 @@ class PhotoSource:
 
     def pull_image(self, image):
         self.downloads.append(image.media_id)
+        if image.media_id in self.http_status:
+            raise HttpStatusError(self.http_status[image.media_id])
         return DownloadedImage(image_bytes(), ".jpg")
 
 
@@ -290,6 +293,100 @@ class PlayerTests(unittest.TestCase):
         self.player.add_album("Other", ALBUM_URL + "-other")
         self.assertEqual(self.player.refresh(), 3)
         self.assertEqual(len(self.player.state["images"]["synthetic-1"]["album_ids"]), 2)
+
+    def fixed_order(self) -> list[str]:
+        keys = sorted(self.player.eligible())
+        self.player.state["show_order"] = keys
+        self.player.state["cursor"] = -1
+        self.player.save()
+        return keys
+
+    def test_gone_photo_is_excluded_and_next_photo_is_shown(self):
+        first, second, third = self.fixed_order()
+        self.player.next()
+        self.source.http_status[second] = 403
+        shown = self.player.next()
+        self.assertEqual(shown.media_id, third)
+        state = self.vault.load_state()
+        self.assertEqual(state["excluded"], [second])
+        self.assertEqual(state["show_order"], [first, third])
+        self.assertEqual(state["cursor"], 1)
+        self.assertEqual(state["current"]["media_id"], third)
+
+    def test_previous_skips_gone_photo_and_excludes_it(self):
+        first, second, third = self.fixed_order()
+        for _ in range(3):
+            self.player.next()
+        self.source.http_status[second] = 410
+        self.assertEqual(self.player.previous().media_id, first)
+        state = self.vault.load_state()
+        self.assertEqual(state["excluded"], [second])
+        self.assertEqual(state["show_order"], [first, third])
+        self.assertEqual(state["cursor"], 0)
+        self.assertEqual(self.player.next().media_id, third)
+
+    def test_previous_with_only_gone_photos_behind_excludes_nothing(self):
+        self.fixed_order()
+        self.player.next()
+        self.player.next()
+        state = self.vault.load_state()
+        self.source.http_status[state["show_order"][0]] = 404
+        with self.assertRaises(PhotosError):
+            self.player.previous()
+        self.assertEqual(self.vault.load_state(), state)
+
+    def test_temporary_download_error_excludes_nothing(self):
+        self.fixed_order()
+        self.player.next()
+        state = self.vault.load_state()
+        for status in [429, 500, 503]:
+            self.source.http_status = {key: status for key in self.player.eligible()}
+            with self.assertRaises(HttpStatusError):
+                self.player.next()
+            self.assertEqual(self.vault.load_state(), state)
+
+    def test_when_every_photo_is_gone_nothing_is_excluded(self):
+        self.fixed_order()
+        state = self.vault.load_state()
+        self.source.http_status = {key: 403 for key in self.player.eligible()}
+        with self.assertRaises(PhotosError) as raised:
+            self.player.next()
+        self.assertNotIsInstance(raised.exception, CollectionExhausted)
+        self.assertEqual(self.vault.load_state(), state)
+
+    def test_gone_skips_are_limited_per_switch(self):
+        self.source.images = [ImageCandidate(f"synthetic-many-{number}",
+                              f"https://lh3.googleusercontent.com/synthetic-many-{number}", 320, 200, None)
+                              for number in range(10)]
+        self.player.refresh()
+        keys = self.fixed_order()
+        state = self.vault.load_state()
+        self.source.http_status = {key: 404 for key in keys[:6]}
+        with self.assertRaises(HttpStatusError):
+            self.player.next()
+        self.assertEqual(self.vault.load_state(), state)
+
+    def test_exclusion_renumbers_order_and_keeps_pointer_on_last_shown(self):
+        first, second, third = self.fixed_order()
+        self.player.next()
+        self.player.next()
+        self.assertEqual(self.player.state["current"]["media_id"], second)
+        self.player._exclude([first])
+        self.assertEqual(self.player.state["show_order"], [second, third])
+        self.assertEqual(self.player.state["cursor"], 0)
+        self.player._exclude([third])
+        self.assertEqual(self.player.state["show_order"], [second])
+        self.assertEqual(self.player.state["cursor"], 0)
+        self.assertEqual(self.vault.load_state()["show_order"], [second])
+
+    def test_excluding_current_moves_pointer_to_photo_before_it(self):
+        first, second, third = self.fixed_order()
+        self.player.next()
+        self.player.next()
+        self.player.exclude_current()
+        self.assertEqual(self.player.state["show_order"], [first, third])
+        self.assertEqual(self.player.state["cursor"], 0)
+        self.assertEqual(self.player.next().media_id, third)
 
     def test_exclude_deletes_cache_and_prevents_selection(self):
         photo = self.player.next()

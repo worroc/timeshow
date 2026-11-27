@@ -13,6 +13,14 @@ class TimeshowError(Exception):
     """An expected failure that is safe to show to the user."""
 
 
+class HttpStatusError(TimeshowError):
+    """Google answered with an HTTP error status. The status is kept for callers."""
+
+    def __init__(self, status: int):
+        super().__init__(f"Google request failed with HTTP {status}.")
+        self.status = status
+
+
 def validate_url(url: str, *, album: bool = False) -> None:
     try:
         parsed = urlsplit(url)
@@ -65,6 +73,6 @@ class HttpClient:
                     raise TimeshowError("Google response exceeded the 64 MiB size limit.")
                 return Response(body, response.headers.get_content_type())
         except HTTPError as error:
-            raise TimeshowError(f"Google request failed with HTTP {error.code}.") from None
+            raise HttpStatusError(error.code) from None
         except (URLError, TimeoutError, OSError):
             raise TimeshowError("Google request failed. Check your network and album sharing.") from None

@@ -23,6 +23,9 @@ if images:
   `body: bytes` and `extension: str`. It fetches exactly one display image.
 - `PhotosError` identifies expected retrieval and parsing failures. A caller can
   report its message without exposing the private URL.
+- `HttpStatusError` is a `PhotosError` for an HTTP error answer. Its `status`
+  attribute holds the code, so a caller can tell a removed photo (403, 404, 410)
+  from a temporary failure.
 
 Treat candidates and their URLs as private. An empty image list means no eligible
 photos. A listing failure raises instead of returning an incomplete result.

@@ -172,6 +172,14 @@ when no eligible photos remain. Old saved seen/history data is migrated when use
 After a successful switch, the previous download and rendered wallpaper file are
 deleted directly, without using the trash. Only the current image is retained.
 Previous downloads or reads the earlier photo again. A failed switch keeps the old image.
+
+If Google answers 403, 404, or 410 for a photo, it was deleted or is no longer
+shared. Next and Previous then leave it out, renumber the order, and repeat the
+same action, up to 5 such photos per switch. When another photo is shown, the
+gone photos are excluded and removed from the saved order. The cursor still
+points at the last shown photo. If no photo can be shown, nothing is excluded,
+so a sharing change cannot wipe the list.
+Network errors, timeouts, and other HTTP errors never exclude a photo.
 Deletion does not guarantee forensic erasure on SSDs or remove OS-cached copies.
 Manually exported images and the separate CLI PoC outputs are not removed.
 

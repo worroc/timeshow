@@ -14,9 +14,15 @@ from .desktop import Desktop
 from ._local import _LocalPhotos
 from ._rotation import _migrate_order, _next_cycle, _reconcile_order
 from .http import validate_url
-from .photos import ImageCandidate, PhotosClient, PhotosError
+from .photos import HttpStatusError, ImageCandidate, PhotosClient, PhotosError
 from .security import Vault
 from .storage import private_directory, write_private
+
+
+# Google answers these for a photo that was deleted or is no longer shared.
+GONE_STATUSES = {403, 404, 410}
+# A switch tries at most this many gone photos before it gives up.
+MAX_GONE_SKIPS = 5
 
 
 class CollectionExhausted(PhotosError):
@@ -180,13 +186,46 @@ class Player:
         self.save()
 
     def next(self) -> DisplayedPhoto:
-        eligible = set(self.eligible())
+        return self._switch(self._next_position)
+
+    def previous(self) -> DisplayedPhoto:
+        return self._switch(self._previous_position)
+
+    def _switch(self, position) -> DisplayedPhoto:
+        """Show the photo chosen by position(). Skip photos that Google reports as gone.
+
+        A gone photo is left out, the order is renumbered, and the same action is
+        repeated. The gone photos are excluded once another photo is shown. A
+        failure that hits every photo (for example, album sharing was turned off)
+        excludes nothing.
+        """
+        gone: list[str] = []
+        while True:
+            try:
+                media_id, index, order = position(set(gone))
+            except CollectionExhausted:
+                if gone:
+                    raise PhotosError("No photo could be downloaded. Check the album sharing.") from None
+                raise
+            try:
+                photo = self._show(media_id, index, order)
+            except HttpStatusError as error:
+                if error.status not in GONE_STATUSES or len(gone) >= MAX_GONE_SKIPS:
+                    raise
+                gone.append(media_id)
+                continue
+            if gone:
+                self._exclude(gone)
+            return photo
+
+    def _next_position(self, skip: set[str]) -> tuple[str, int, list[str]]:
+        eligible = set(self.eligible()) - skip
         if not eligible:
             raise CollectionExhausted("No eligible photos are available. Check sources and filters, then refresh the photo list.")
         order, cursor = _reconcile_order(self.state, eligible)
         if len(eligible) == 1:
             index = max(0, cursor)
-            return self._show(order[index], index, order)
+            return order[index], index, order
         last_shown = self.state.get("current", {}).get("media_id")
         index = cursor + 1
         while index < len(order) and order[index] == last_shown:
@@ -194,17 +233,17 @@ class Player:
         if index == len(order):
             order, cursor = _next_cycle(order, eligible, last_shown)
             index = cursor + 1
-        return self._show(order[index], index, order)
+        return order[index], index, order
 
-    def previous(self) -> DisplayedPhoto:
-        order, cursor = _reconcile_order(self.state, set(self.eligible()))
+    def _previous_position(self, skip: set[str]) -> tuple[str, int, list[str]]:
+        order, cursor = _reconcile_order(self.state, set(self.eligible()) - skip)
         current_id = self.state.get("current", {}).get("media_id")
         index = cursor - 1
         if cursor >= 0 and current_id is not None and order[cursor] != current_id:
             index = cursor
         if index < 0:
             raise PhotosError("There is no previous photo.")
-        return self._show(order[index], index, order)
+        return order[index], index, order
 
     def _candidate(self, media_id: str) -> ImageCandidate:
         item = self.state["images"][media_id]
@@ -277,11 +316,15 @@ class Player:
     def exclude_current(self) -> None:
         if not self.current:
             raise PhotosError("No photo is currently displayed.")
-        excluded = set(self.state["excluded"])
-        excluded.add(self.current.media_id)
-        self.state["excluded"] = sorted(excluded)
+        self._exclude([self.current.media_id])
+
+    def _exclude(self, media_ids: list[str]) -> None:
+        # save() drops excluded photos from the show order and moves the cursor
+        # so it still points at the last shown photo.
+        self.state["excluded"] = sorted(set(self.state["excluded"]) | set(media_ids))
         self.save()
-        self.vault.delete_image(self.current.media_id)
+        for media_id in media_ids:
+            self.vault.delete_image(media_id)
 
     def reset_history(self) -> None:
         order, cursor = _reconcile_order(self.state, set(self.eligible()))
